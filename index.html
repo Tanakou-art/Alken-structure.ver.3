@@ -85,8 +85,6 @@
         <option value="4">シクロブタン (C4H8)</option>
         <option value="5">シクロペンタン (C5H10)</option>
         <option value="6">シクロヘキサン (C6H12)</option>
-        <option value="7">シクロヘプタン (C7H14)</option>
-        <option value="8">シクロオクタン (C8H16)</option>
       </select>
     </div>
 
@@ -133,53 +131,48 @@
   <div id="description" class="info">
     <h2 id="molTitle" class="font-bold text-sm text-gray-800">シクロプロパン</h2>
     <p id="molDesc" class="text-[10px] text-gray-600">
-      シクロアルカンは環状構造をもちます。シクロヘキサンは配座（椅子型・舟形）をとります。
+      C3〜C5は結合長が一定になる正多角形（平面）として表示。C6のみ椅子型⇄舟形の配座変換を表示します。
     </p>
   </div>
 
   <script type="module">
     import * as THREE from "three";
 
-    // ====== Scene ======
-    let scene, camera, renderer;
-    let moleculeGroup;
+    // ===== Scene =====
+    let scene, camera, renderer, moleculeGroup;
+
+    // ===== State =====
     let showHydrogen = true;
     let showLabels = false;
-
-    // rotation/zoom
     let isAutoRotate = true;
+
+    // pinch zoom
     let zoomScale = 1.0;
     const ZOOM_MIN = 0.35, ZOOM_MAX = 3.5;
 
-    // ====== Geometry params ======
-    const BOND_CC = 1.54;
+    // ===== Physical-like constants =====
+    const BOND_CC = 1.54; // target C-C distance (model units)
     const BOND_CH = 1.09;
 
     const RADIUS_C = 0.40;
     const RADIUS_H = 0.25;
 
-    // Ring radius (approx so that neighbor distance ~1.54)
-    function ringRadius(n){
-      // side length s = 2R sin(pi/n) => R = s/(2 sin(pi/n))
-      return BOND_CC / (2 * Math.sin(Math.PI / n));
-    }
-
-    // ====== Objects references ======
+    // ===== Mesh refs =====
     let carbonMeshes = [];
     let hydrogenMeshes = [];
     let bondCCMeshes = [];
     let bondCHMeshes = [];
     let labelSprites = [];
 
-    // ====== Cyclohexane conformation animation ======
+    // ===== Cyclohexane conformations =====
     let currentRing = 3;
-    let conformation = "chair"; // for n=6 only: 'chair' or 'boat'
+    let conformation = "chair";       // current ('chair' or 'boat') for n=6
     let targetConformation = "chair";
-    let confT = 0;            // 0->1 interpolation chair->boat (or reverse depending on start/end)
+    let confT = 0;
     let confAnimating = false;
     let confLoopPlaying = false;
 
-    // ====== UI elements ======
+    // ===== UI =====
     const elRing = document.getElementById("ringSelect");
     const elCycloHexControls = document.getElementById("cycloHexControls");
     const elToggleConf = document.getElementById("toggleConformation");
@@ -191,67 +184,43 @@
     const elTitle = document.getElementById("molTitle");
     const elDesc = document.getElementById("molDesc");
 
-    // ====== init ======
-    function init(){
-      scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
-      camera.position.set(0, 0, 10);
+    // ===== Utils =====
+    const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+    const lerp = (a,b,t)=>a+(b-a)*t;
+    const lerpVec = (A,B,t)=>new THREE.Vector3(lerp(A.x,B.x,t), lerp(A.y,B.y,t), lerp(A.z,B.z,t));
+    const easeInOut = (t)=> t*t*(3-2*t);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setClearColor(0xf3f4f6, 1);
-      document.body.appendChild(renderer.domElement);
-
-      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-      const light = new THREE.DirectionalLight(0xffffff, 0.7);
-      light.position.set(6, 10, 7);
-      scene.add(light);
-
-      moleculeGroup = new THREE.Group();
-      scene.add(moleculeGroup);
-
-      setupInteractions();
-      updateMoleculeFromUI();
-      animate();
+    function ringRadius(n){
+      // side s = 2R sin(pi/n) => R = s/(2 sin(pi/n))
+      return BOND_CC / (2 * Math.sin(Math.PI / n));
     }
-
-    // ====== build helpers ======
-    function clearGroup(){
-      while(moleculeGroup.children.length > 0) moleculeGroup.remove(moleculeGroup.children[0]);
-      carbonMeshes = [];
-      hydrogenMeshes = [];
-      bondCCMeshes = [];
-      bondCHMeshes = [];
-      labelSprites = [];
-    }
-
-    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
     function makeAtomSphere(radius, color){
-      const geo = new THREE.SphereGeometry(radius, 20, 20);
-      const mat = new THREE.MeshPhongMaterial({ color });
-      return new THREE.Mesh(geo, mat);
+      return new THREE.Mesh(
+        new THREE.SphereGeometry(radius, 20, 20),
+        new THREE.MeshPhongMaterial({ color })
+      );
     }
 
-    function makeBondCylinder(length, radius, color, opacity=1){
-      const geo = new THREE.CylinderGeometry(radius, radius, length, 14);
-      const mat = new THREE.MeshPhongMaterial({ color, transparent: opacity < 1, opacity });
-      return new THREE.Mesh(geo, mat);
+    function makeBondCylinder(radius, color){
+      const m = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius, 1, 14),
+        new THREE.MeshPhongMaterial({ color })
+      );
+      m.userData.radius = radius;
+      return m;
     }
 
-    function setCylinderBetween(cyl, a, b){
+    function setBondNow(bondMesh, a, b, radius){
       const dir = new THREE.Vector3().subVectors(b, a);
       const len = dir.length();
-      cyl.scale.set(1, 1, 1);
-      cyl.geometry.dispose();
-      cyl.geometry = new THREE.CylinderGeometry(cyl.userData.radius, cyl.userData.radius, len, 14);
 
-      cyl.position.copy(a).add(b).multiplyScalar(0.5);
-      cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+      bondMesh.geometry.dispose();
+      bondMesh.geometry = new THREE.CylinderGeometry(radius, radius, len, 14);
+      bondMesh.position.copy(a).add(b).multiplyScalar(0.5);
+      bondMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
     }
 
-    // label sprite
     function makeLabelSprite(text){
       const canvas = document.createElement("canvas");
       canvas.width = 128; canvas.height = 128;
@@ -270,98 +239,83 @@
       return sp;
     }
 
-    // ====== Ring coordinate generators ======
-    // Base planar polygon in XY
-    function baseRingXY(n){
+    function clearGroup(){
+      while(moleculeGroup.children.length>0) moleculeGroup.remove(moleculeGroup.children[0]);
+      carbonMeshes = [];
+      hydrogenMeshes = [];
+      bondCCMeshes = [];
+      bondCHMeshes = [];
+      labelSprites = [];
+    }
+
+    // ===== Coordinate generators =====
+    // C3-C5: planar regular polygon (bond length is exactly BOND_CC by radius choice)
+    function planarRing(n){
       const R = ringRadius(n);
       const pts = [];
       for(let i=0;i<n;i++){
-        const ang = (i / n) * Math.PI * 2;
-        pts.push(new THREE.Vector3(R * Math.cos(ang), R * Math.sin(ang), 0));
+        const ang = (i/n)*Math.PI*2;
+        pts.push(new THREE.Vector3(R*Math.cos(ang), R*Math.sin(ang), 0));
       }
       return pts;
     }
 
-    // Simple puckering for n!=6 (visual only)
-    // (n=3,4 planar; n>=5 use alternating z)
-    function applyPucker(n, pts){
-      if (n <= 4) return pts;
-
-      const amp = 0.55; // visual
-      for(let i=0;i<n;i++){
-        // alternate z up/down; for odd n, shift pattern
-        const sign = (i % 2 === 0) ? 1 : -1;
-        pts[i].z = amp * sign * (n === 5 ? 0.6 : 1.0);
-      }
-      return pts;
-    }
-
-    // Cyclohexane chair and boat target coordinates (visual model)
+    // C6 chair: parameters chosen so that ALL adjacent distances are exactly BOND_CC
+    // using a^2 = 3 b^2 and b^2 + c^2 = s^2/4 and s^2 = a^2 + b^2 + 4c^2
     function cycloHexChair(){
-      // start from hexagon XY, then apply chair-like z + slight XY warp
-      const pts = baseRingXY(6);
+      const s = BOND_CC;
+      const k = 0.6; // c = k*b  (見た目調整パラメータ。結合長は厳密に保たれる)
+      const b = s / (2 * Math.sqrt(1 + k*k));
+      const c = k * b;
+      const a = Math.sqrt(3) * b;
 
-      // chair z (alternating up/down)
-      const z = [ 0.65, -0.65, 0.65, -0.65, 0.65, -0.65 ];
-      for(let i=0;i<6;i++){
-        pts[i].z = z[i];
-      }
-      // small warp to make it look more chair-like
-      // pull two opposite carbons a bit
-      pts[0].x *= 1.02; pts[3].x *= 1.02;
-      pts[1].y *= 0.98; pts[4].y *= 0.98;
-
-      return pts;
+      // 1-2-3-4-5-6-1 の結合長がすべて s になる対称配置
+      return [
+        new THREE.Vector3( a,  b,  c),
+        new THREE.Vector3( 0, 2*b, -c),
+        new THREE.Vector3(-a,  b,  c),
+        new THREE.Vector3(-a, -b, -c),
+        new THREE.Vector3( 0,-2*b,  c),
+        new THREE.Vector3( a, -b, -c)
+      ];
     }
 
+    // C6 boat: also ALL adjacent distances exactly BOND_CC
+    // enforce p3-p4 and p6-p1 are vertical: 2c = s => c = s/2
+    // and a^2 + b^2 + c^2 = s^2
     function cycloHexBoat(){
-      const pts = baseRingXY(6);
+      const s = BOND_CC;
+      const c = s/2;
+      const a = s * Math.sqrt(3/8);
+      const b = a;
 
-      // boat: two "ends" up, middle down-ish
-      const z = [ 0.85, 0.20, -0.45, -0.45, 0.20, 0.85 ];
-      for(let i=0;i<6;i++){
-        pts[i].z = z[i];
+      return [
+        new THREE.Vector3( a, 0,  c),
+        new THREE.Vector3( 0, b,  0),
+        new THREE.Vector3(-a, 0, -c),
+        new THREE.Vector3(-a, 0,  c),
+        new THREE.Vector3( 0,-b,  0),
+        new THREE.Vector3( a, 0, -c)
+      ];
+    }
+
+    function getRingCarbonPositions(n){
+      if (n===6){
+        return (conformation==="chair") ? cycloHexChair() : cycloHexBoat();
       }
-
-      // bring ends closer (bow/stern)
-      // move vertices 0 and 5 slightly inward toward center
-      pts[0].multiplyScalar(0.93);
-      pts[5].multiplyScalar(0.93);
-
-      // slight twist feel
-      pts[2].x *= 1.03;
-      pts[3].x *= 1.03;
-
-      return pts;
+      return planarRing(n);
     }
 
-    function lerpVec(a, b, t){
-      return new THREE.Vector3(
-        a.x + (b.x - a.x) * t,
-        a.y + (b.y - a.y) * t,
-        a.z + (b.z - a.z) * t
-      );
-    }
-
-    // ====== Construct molecule (ring + H) ======
+    // ===== Build molecule =====
     function buildCycloalkane(n){
       clearGroup();
 
-      // --- ring carbon positions ---
-      let carbonPos;
-      if (n === 6){
-        // initial conformation
-        carbonPos = (conformation === "chair") ? cycloHexChair() : cycloHexBoat();
-      } else {
-        carbonPos = applyPucker(n, baseRingXY(n));
-      }
+      const carbonPos = getRingCarbonPositions(n);
 
-      // --- create carbon meshes ---
+      // carbon spheres + labels
       for(let i=0;i<n;i++){
         const c = makeAtomSphere(RADIUS_C, 0x333333);
         c.position.copy(carbonPos[i]);
-        c.userData.isCarbon = true;
-        c.userData.index = i+1;
         moleculeGroup.add(c);
         carbonMeshes.push(c);
 
@@ -373,32 +327,26 @@
         }
       }
 
-      // --- C-C bonds (ring) ---
+      // C-C bonds
       for(let i=0;i<n;i++){
-        const j = (i+1) % n;
-        const a = carbonPos[i], b = carbonPos[j];
-        const bond = makeBondCylinder(1, 0.08, 0xcccccc);
-        bond.userData.radius = 0.08;
+        const j = (i+1)%n;
+        const bond = makeBondCylinder(0.08, 0xcccccc);
         moleculeGroup.add(bond);
         bondCCMeshes.push({ mesh: bond, i, j });
-        setBondNow(bond, a, b, 0.08);
+        setBondNow(bond, carbonPos[i], carbonPos[j], 0.08);
       }
 
-      // --- Hydrogens (simple outward model) ---
-      // cycloalkane C_nH_2n : each carbon has 2 hydrogens
+      // Hydrogens (simple outward model; not stereochemically perfect, but位置は安定)
       if (showHydrogen){
         const center = new THREE.Vector3();
-        carbonPos.forEach(p => center.add(p));
+        carbonPos.forEach(p=>center.add(p));
         center.divideScalar(n);
 
         for(let i=0;i<n;i++){
           const p = carbonPos[i];
-
-          // outward direction from center (with z)
           const out = p.clone().sub(center).normalize();
-          // perpendicular direction to give 2 H (approx)
-          const tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
-          if (tangent.lengthSq() < 1e-6) tangent.set(1,0,0);
+          let tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
+          if (tangent.lengthSq()<1e-8) tangent.set(1,0,0);
 
           const dirs = [
             out.clone().add(tangent.clone().multiplyScalar(0.35)).normalize(),
@@ -412,122 +360,69 @@
             moleculeGroup.add(h);
             hydrogenMeshes.push(h);
 
-            const bond = makeBondCylinder(1, 0.04, 0xcccccc);
-            bond.userData.radius = 0.04;
+            const bond = makeBondCylinder(0.04, 0xcccccc);
             moleculeGroup.add(bond);
-            bondCHMeshes.push({ mesh: bond, cIndex: i, hIndex: hydrogenMeshes.length - 1 });
+            bondCHMeshes.push({ mesh: bond, cIndex: i, hIndex: hydrogenMeshes.length-1 });
             setBondNow(bond, p, hPos, 0.04);
           }
         }
       }
 
-      // center and camera fit
       recenterAndFitCamera();
       resetView(false);
-    }
-
-    function setBondNow(bondMesh, a, b, radius){
-      const dir = new THREE.Vector3().subVectors(b, a);
-      const len = dir.length();
-      bondMesh.geometry.dispose();
-      bondMesh.geometry = new THREE.CylinderGeometry(radius, radius, len, 14);
-      bondMesh.position.copy(a).add(b).multiplyScalar(0.5);
-      bondMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
     }
 
     function recenterAndFitCamera(){
       const box = new THREE.Box3().setFromObject(moleculeGroup);
       const center = new THREE.Vector3();
       box.getCenter(center);
-      moleculeGroup.children.forEach(obj => obj.position.sub(center));
+      moleculeGroup.children.forEach(obj=>obj.position.sub(center));
 
       const size = new THREE.Vector3();
       box.getSize(size);
       const maxDim = Math.max(size.x, size.y, size.z);
-      let dist = Math.max(6, maxDim * 2.3 + 2);
-      if (camera.aspect < 1.0) dist *= 1.4;
+      let dist = Math.max(6, maxDim*2.4 + 2);
+      if (camera.aspect < 1.0) dist *= 1.35;
       camera.position.set(0, 0, dist);
     }
 
-    // ====== Cyclohexane dynamic morph ======
-    function updateCyclohexaneMorph(dt){
-      if (currentRing !== 6) return;
-
-      if (confLoopPlaying){
-        // loop: chair <-> boat continuously
-        confT += dt * 0.6; // speed
-        const phase = (Math.sin(confT * Math.PI * 2) + 1) / 2; // 0..1
-        applyConformationBlend(phase);
-        return;
-      }
-
-      if (!confAnimating) return;
-
-      // one-shot morph toward target
-      const speed = 0.9;
-      confT += dt * speed;
-      if (confT >= 1){
-        confT = 1;
-        confAnimating = false;
-        conformation = targetConformation;
-      }
-      const t = easeInOut(confT);
-      if (conformation === "chair" && targetConformation === "boat"){
-        applyConformationBlend(t); // chair->boat
-      } else if (conformation === "boat" && targetConformation === "chair"){
-        applyConformationBlend(1 - t); // boat->chair (invert)
-      } else {
-        applyConformationBlend(conformation === "chair" ? 0 : 1);
-        confAnimating = false;
-      }
-    }
-
-    function easeInOut(t){
-      // smoothstep
-      return t * t * (3 - 2 * t);
-    }
-
+    // ===== Cyclohexane morph =====
     function applyConformationBlend(tChairToBoat01){
       // t=0 chair, t=1 boat
       const chair = cycloHexChair();
       const boat  = cycloHexBoat();
 
       const pts = [];
-      for(let i=0;i<6;i++){
-        pts.push(lerpVec(chair[i], boat[i], tChairToBoat01));
-      }
+      for(let i=0;i<6;i++) pts.push(lerpVec(chair[i], boat[i], tChairToBoat01));
 
-      // apply positions to carbon meshes
+      // apply to carbons
       for(let i=0;i<6;i++){
         carbonMeshes[i].position.copy(pts[i]);
       }
 
-      // update labels if exist
+      // labels
       if (showLabels){
         for(let i=0;i<labelSprites.length;i++){
-          labelSprites[i].position.copy(pts[i]).add(new THREE.Vector3(0, 0.55, 0));
+          labelSprites[i].position.copy(pts[i]).add(new THREE.Vector3(0,0.55,0));
         }
       }
 
-      // update CC bonds
+      // C-C bonds
       for(const b of bondCCMeshes){
-        const a = pts[b.i];
-        const c = pts[b.j];
-        setBondNow(b.mesh, a, c, 0.08);
+        setBondNow(b.mesh, pts[b.i], pts[b.j], 0.08);
       }
 
-      // update H + CH bonds (simple outward model recalculated)
+      // Hydrogens + C-H bonds (recompute outward each frame)
       if (showHydrogen){
         const center = new THREE.Vector3();
-        pts.forEach(p => center.add(p));
+        pts.forEach(p=>center.add(p));
         center.divideScalar(6);
 
-        // Each carbon has 2 H => order in hydrogenMeshes: i*2 + k
         for(let i=0;i<6;i++){
           const p = pts[i];
           const out = p.clone().sub(center).normalize();
-          const tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
-          if (tangent.lengthSq() < 1e-6) tangent.set(1,0,0);
+          let tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
+          if (tangent.lengthSq()<1e-8) tangent.set(1,0,0);
 
           const dirs = [
             out.clone().add(tangent.clone().multiplyScalar(0.35)).normalize(),
@@ -541,7 +436,6 @@
           }
         }
 
-        // update CH bonds: bondCHMeshes stores mapping
         for(const b of bondCHMeshes){
           const cPos = pts[b.cIndex];
           const hPos = hydrogenMeshes[b.hIndex].position;
@@ -549,37 +443,60 @@
         }
       }
 
-      // recenter to keep screen stable (optional light recenter)
-      // → 大きく動くと見にくいので、ここは「炭素重心」基準で微調整
+      // recentre to keep it from drifting
       const cCenter = new THREE.Vector3();
       for(let i=0;i<6;i++) cCenter.add(carbonMeshes[i].position);
       cCenter.divideScalar(6);
-      moleculeGroup.children.forEach(obj => obj.position.sub(cCenter));
+      moleculeGroup.children.forEach(obj=>obj.position.sub(cCenter));
     }
 
-    // ====== UI-driven updates ======
-    function updateMoleculeFromUI(){
-      const v = elRing.value;
-      currentRing = parseInt(v, 10);
+    function updateCyclohexaneMorph(dt){
+      if (currentRing !== 6) return;
 
-      // show cyclohex controls only for 6
+      if (confLoopPlaying){
+        confT += dt * 0.6;
+        const phase = (Math.sin(confT * Math.PI * 2) + 1) / 2; // 0..1
+        applyConformationBlend(phase);
+        return;
+      }
+
+      if (!confAnimating) return;
+
+      const speed = 0.95;
+      confT += dt * speed;
+      if (confT >= 1){
+        confT = 1;
+        confAnimating = false;
+        conformation = targetConformation;
+      }
+      const t = easeInOut(confT);
+
+      if (conformation==="chair" && targetConformation==="boat"){
+        applyConformationBlend(t);
+      } else if (conformation==="boat" && targetConformation==="chair"){
+        applyConformationBlend(1 - t);
+      } else {
+        confAnimating = false;
+      }
+    }
+
+    // ===== UI actions =====
+    function updateMoleculeFromUI(){
+      currentRing = parseInt(elRing.value, 10);
+
+      // show conformation buttons only for C6
       elCycloHexControls.classList.toggle("hidden", currentRing !== 6);
 
-      // set title/desc
       const nameMap = {
-        3: ["シクロプロパン", "環が小さく、ひずみが大きいと考えられます。"],
-        4: ["シクロブタン", "環ひずみを減らすため、わずかに折れ曲がると考えられます。"],
-        5: ["シクロペンタン", "平面から少し外れた立体形（パッカー）をとります。"],
-        6: ["シクロヘキサン", "椅子型は安定、舟形は反発が増えやすい配座です。ボタンで動的に変形します。"],
-        7: ["シクロヘプタン", "環が大きくなり、さまざまな立体形が可能です。"],
-        8: ["シクロオクタン", "さらに柔軟で複数の立体形をとりえます。"]
+        3: ["シクロプロパン", "C3〜C5は結合長が一定になる正多角形（平面）として表示します（結合長はC–C=1.54として整合）。"],
+        4: ["シクロブタン", "ここでは結合長整合を優先して平面モデルで表示（実際はわずかに折れ曲がることが多い）。"],
+        5: ["シクロペンタン", "ここでは結合長整合を優先して平面モデルで表示（実際はエンベロープ等で非平面）。"],
+        6: ["シクロヘキサン", "椅子型・舟形ともに、環の全てのC–C結合長が同じ（1.54）になるよう設計した座標で表示します。ボタンで配座変換します。"]
       };
-
       const [nm, dc] = nameMap[currentRing] || ["シクロアルカン", ""];
       elTitle.textContent = nm;
       elDesc.textContent = dc;
 
-      // reset conformation state
       if (currentRing === 6){
         conformation = "chair";
         targetConformation = "chair";
@@ -593,8 +510,7 @@
       buildCycloalkane(currentRing);
     }
 
-    // ====== Controls ======
-    function resetView(resetZoom = true){
+    function resetView(resetZoom=true){
       moleculeGroup.rotation.set(0.35, 0.2, 0);
       if (resetZoom){
         zoomScale = 1.0;
@@ -602,9 +518,8 @@
       }
     }
 
-    // ====== interactions ======
+    // ===== Interactions =====
     function setupInteractions(){
-      // UI show/hide
       document.getElementById('hideUIPanel').addEventListener('click', () => {
         document.getElementById('controlsPanel').classList.add('minimized');
         document.getElementById('toggleUIPanel').classList.remove('hidden');
@@ -614,10 +529,8 @@
         document.getElementById('toggleUIPanel').classList.add('hidden');
       });
 
-      // Select ring
       elRing.addEventListener("change", updateMoleculeFromUI);
 
-      // Toggle H
       elToggleHydrogen.addEventListener("click", () => {
         showHydrogen = !showHydrogen;
         elToggleHydrogen.classList.toggle("active", showHydrogen);
@@ -625,7 +538,6 @@
         buildCycloalkane(currentRing);
       });
 
-      // Toggle labels
       elToggleLabels.addEventListener("click", () => {
         showLabels = !showLabels;
         elToggleLabels.classList.toggle("active", showLabels);
@@ -633,26 +545,23 @@
         buildCycloalkane(currentRing);
       });
 
-      // Auto rotate
       elAutoRotate.addEventListener("click", () => {
         isAutoRotate = !isAutoRotate;
         elAutoRotate.textContent = isAutoRotate ? "自動回転 ON" : "自動回転 OFF";
       });
 
-      // Reset view
       elReset.addEventListener("click", () => resetView(true));
 
-      // Cyclohexane: one-shot toggle
+      // cyclohex controls
       elToggleConf.addEventListener("click", () => {
         if (currentRing !== 6) return;
-        if (confLoopPlaying) return; // loop中は1回切替しない
+        if (confLoopPlaying) return;
 
         targetConformation = (conformation === "chair") ? "boat" : "chair";
         confT = 0;
         confAnimating = true;
       });
 
-      // Cyclohexane: loop play
       elPlayConf.addEventListener("click", () => {
         if (currentRing !== 6) return;
         confLoopPlaying = !confLoopPlaying;
@@ -662,7 +571,7 @@
         confT = 0;
       });
 
-      // Drag rotate + pinch zoom
+      // drag rotate + pinch zoom
       let dragging = false, px = 0, py = 0;
       let lastPinchDist = 0;
 
@@ -714,7 +623,7 @@
       window.addEventListener("touchend", onUp);
     }
 
-    // ====== animation loop ======
+    // ===== Loop =====
     let lastTime = performance.now();
     function animate(){
       requestAnimationFrame(animate);
@@ -723,17 +632,38 @@
       const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
 
-      if (isAutoRotate){
-        moleculeGroup.rotation.y += 0.008;
-      }
+      if (isAutoRotate) moleculeGroup.rotation.y += 0.008;
 
-      // cyclohexane morph update
       updateCyclohexaneMorph(dt);
 
       renderer.render(scene, camera);
     }
 
-    // ====== resize ======
+    // ===== Init =====
+    function init(){
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+      camera.position.set(0, 0, 10);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setClearColor(0xf3f4f6, 1);
+      document.body.appendChild(renderer.domElement);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+      const light = new THREE.DirectionalLight(0xffffff, 0.7);
+      light.position.set(6, 10, 7);
+      scene.add(light);
+
+      moleculeGroup = new THREE.Group();
+      scene.add(moleculeGroup);
+
+      setupInteractions();
+      updateMoleculeFromUI();
+      animate();
+    }
+
     window.addEventListener("resize", () => {
       if (!camera || !renderer) return;
       camera.aspect = window.innerWidth / window.innerHeight;
