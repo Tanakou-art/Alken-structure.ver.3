@@ -16,14 +16,14 @@
   <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
-    body { margin: 0; overflow: hidden; background:#f3f4f6; color:#111827; font-family: sans-serif; }
-    canvas { display:block; touch-action: none; } /* ブラウザ標準のピンチズームを無効化 */
+    body { margin:0; overflow:hidden; background:#f3f4f6; color:#111827; font-family:sans-serif; }
+    canvas { display:block; touch-action:none; } /* ピンチでブラウザがズームしない */
     .panel{
       position:absolute; top:16px; left:16px; z-index:10;
       background:rgba(255,255,255,0.95);
       border:1px solid #e5e7eb; border-radius:12px;
       box-shadow: 0 10px 18px rgba(0,0,0,0.08);
-      padding:12px; width:310px; max-width:calc(100% - 32px);
+      padding:12px; width:320px; max-width:calc(100% - 32px);
     }
     .hint{
       position:absolute; bottom:14px; left:14px; z-index:10;
@@ -32,7 +32,7 @@
       padding:10px 12px; font-size:12px; color:#374151;
       max-width: calc(100% - 28px);
     }
-    @media (max-width: 768px){ .panel{ width: 280px; } }
+    @media (max-width: 768px){ .panel{ width: 290px; } }
   </style>
 </head>
 
@@ -46,14 +46,14 @@
     <div class="mb-3">
       <label class="block text-xs font-semibold text-gray-500 mb-1">分子を選択</label>
       <select id="molSelect" class="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-        <option value="c3">シクロプロパン (C3H6)</option>
+        <option value="c3" selected>シクロプロパン (C3H6)</option>
         <option value="c4">シクロブタン (C4H8)</option>
         <option value="c5">シクロペンタン (C5H10)</option>
-        <option value="c6" selected>シクロヘキサン (C6H12)</option>
+        <option value="c6">シクロヘキサン (C6H12)</option>
       </select>
     </div>
 
-    <div id="c6Controls" class="mb-3">
+    <div id="c6Controls" class="mb-3" style="display:none;">
       <label class="block text-xs font-semibold text-gray-500 mb-1">シクロヘキサン配座</label>
       <div class="grid grid-cols-2 gap-2">
         <button id="chairBtn" class="bg-indigo-600 text-white font-bold py-2 rounded-xl text-xs hover:brightness-110">椅子形</button>
@@ -65,7 +65,7 @@
       </button>
 
       <div class="text-[11px] text-gray-500 mt-1">
-        ※切替はアニメーションで変形（C–C結合長は常に一定に補正）
+        ※切替はアニメーションで変形しつつ、C–C結合長とC–C–C角を拘束して補正
       </div>
     </div>
 
@@ -80,8 +80,8 @@
   </div>
 
   <div class="hint" id="descBox">
-    <div class="font-bold" id="descTitle">シクロヘキサン</div>
-    <div id="descText">椅子形⇄舟形の違いを観察できます。</div>
+    <div class="font-bold" id="descTitle">シクロプロパン</div>
+    <div id="descText">環角（C–C–C）は60°。結合はひずみを受けます。</div>
   </div>
 
   <script type="module">
@@ -92,6 +92,7 @@
     // ==========
     const BOND_CC = 1.54;
     const BOND_CH = 1.09;
+    const TETRA = 109.5 * Math.PI/180;
 
     const R_C = 0.40;
     const R_H = 0.25;
@@ -100,29 +101,36 @@
     const COLOR_H = 0xadd8e6;
     const COLOR_BOND = 0xcccccc;
 
-    // 変形
+    // 環角（C–C–C）の目標：代表的な値（教材用の「理想」）
+    const RING_ANGLE_TARGET = {
+      c3: 60.0  * Math.PI/180,
+      c4: 90.0  * Math.PI/180,
+      c5: 108.0 * Math.PI/180,
+      c6: 111.5 * Math.PI/180
+    };
+
+    // 拘束（反復回数）
+    const LEN_ITERS   = 18; // 長さ
+    const ANG_ITERS   = 14; // 角度
+    const RELAX_ITERS = 22; // 全体
+    const FOLLOW = 0.28;    // 形テンプレ追従度
+
+    // 変形（c6）
     let morphT = 0;       // 0=chair, 1=boat
     let morphTarget = 0;
     let isMorphing = false;
     let isPlaying = false;
     let morphDir = 1;
-
     const MORPH_SPEED = 0.06;
     const PLAY_SPEED  = 0.010;
-
-    // C–C距離拘束（PBD）
-    const CONSTRAINT_ITERS = 16; // 少し強め
-    const CONSTRAINT_STIFF = 1.00;
-
-    // ==========
-    // three.js
-    // ==========
-    let scene, camera, renderer, root;
 
     // UI状態
     let showH = true;
     let showLabel = false;
-    let currentMol = "c6";
+    let currentMol = "c3";
+
+    // three.js
+    let scene, camera, renderer, root;
 
     // タッチ操作
     let dragging = false, lastX = 0, lastY = 0;
@@ -140,12 +148,101 @@
     let ringTarget = [];
 
     // ==========
-    // 「理想的」テンプレ生成
-    // ここを科学的特徴に寄せる
+    // 幾何ユーティリティ
+    // ==========
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+    function rotateAroundAxis(vec, axis, angle) {
+      const q = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+      return vec.applyQuaternion(q);
+    }
+
+    function angleAt(a, b, c) {
+      const v1 = a.clone().sub(b).normalize();
+      const v2 = c.clone().sub(b).normalize();
+      return Math.acos(clamp(v1.dot(v2), -1, 1));
+    }
+
+    // ==========
+    // (1) 長さ拘束：隣接点の距離をBOND_CCに揃える
+    // ==========
+    function enforceBondLengths(points, targetLen) {
+      const n = points.length;
+      for (let iter=0; iter<LEN_ITERS; iter++) {
+        for (let i=0; i<n; i++) {
+          const j = (i+1)%n;
+          const pi = points[i];
+          const pj = points[j];
+          const d = pj.clone().sub(pi);
+          const dist = d.length();
+          if (dist < 1e-9) continue;
+          const diff = (dist - targetLen) / dist;
+          const corr = d.multiplyScalar(0.5 * diff);
+          pi.add(corr);
+          pj.sub(corr);
+        }
+      }
+    }
+
+    // ==========
+    // (2) 角度拘束：C–C–C角を目標に近づける（回転で補正）
+    //     bを中心に、aとcを軸(axis=cross)周りに±回転 → 距離(b-a),(b-c)は保持
+    // ==========
+    function enforceRingAngles(points, targetAngle) {
+      const n = points.length;
+      for (let iter=0; iter<ANG_ITERS; iter++) {
+        for (let i=0; i<n; i++) {
+          const im1 = (i-1+n)%n;
+          const ip1 = (i+1)%n;
+
+          const a = points[im1];
+          const b = points[i];
+          const c = points[ip1];
+
+          const v1 = a.clone().sub(b);
+          const v2 = c.clone().sub(b);
+          const nrm = new THREE.Vector3().crossVectors(v1, v2);
+          if (nrm.lengthSq() < 1e-10) continue;
+          nrm.normalize();
+
+          const cur = angleAt(a,b,c);
+          const err = cur - targetAngle; // +なら広すぎ
+          if (Math.abs(err) < 1e-4) continue;
+
+          // 回転量（半分ずつ）
+          const delta = clamp(err * 0.35, -0.12, 0.12); // 過剰補正防止
+          const va = a.clone().sub(b);
+          const vc = c.clone().sub(b);
+
+          // aを +delta、cを -delta 回転（角を狭めたり広げたり）
+          rotateAroundAxis(va, nrm, +delta);
+          rotateAroundAxis(vc, nrm, -delta);
+
+          a.copy(b.clone().add(va));
+          c.copy(b.clone().add(vc));
+        }
+      }
+    }
+
+    // ==========
+    // (3) 全体リラックス：長さ→角度→長さ を複数回
+    // ==========
+    function relaxRing(points, molKey) {
+      const targetAng = RING_ANGLE_TARGET[molKey] ?? (109.5*Math.PI/180);
+      for (let k=0; k<RELAX_ITERS; k++) {
+        enforceBondLengths(points, BOND_CC);
+        enforceRingAngles(points, targetAng);
+        enforceBondLengths(points, BOND_CC);
+      }
+    }
+
+    // ==========
+    // テンプレ（“理想形の雰囲気”）→ その後 relaxRing で角度・長さを整える
     // ==========
     function templateRing(molKey, conformer="chair") {
       if (molKey === "c3") {
-        const R = 1.0;
+        // 正三角形（環角60°）
+        const R = 1.10;
         return [
           new THREE.Vector3( R, 0, 0),
           new THREE.Vector3(-R/2,  Math.sqrt(3)*R/2, 0),
@@ -154,7 +251,8 @@
       }
 
       if (molKey === "c4") {
-        const R = 1.0, h = 0.45;
+        // パッカリング（折れ）を入れる
+        const R = 1.05, h = 0.55;
         return [
           new THREE.Vector3( R, 0,  h),
           new THREE.Vector3( 0, R, -h),
@@ -164,47 +262,40 @@
       }
 
       if (molKey === "c5") {
+        // エンベロープ
         const ang = (2*Math.PI)/5;
-        const R = 1.15;
+        const R = 1.20;
         const pts = [];
         for (let i=0;i<5;i++){
           const a = i*ang;
           pts.push(new THREE.Vector3(R*Math.cos(a), R*Math.sin(a), 0));
         }
-        // エンベロープ：1点上げる（理想形っぽく）
-        pts[0].z = 0.80;
-        pts[2].z = -0.25;
+        pts[0].z = 0.85;
+        pts[2].z = -0.30;
         return pts;
       }
 
-      // ---- c6（ここが本命） ----
-      // 椅子形：上下が交互になり、隣接C-Cはほぼ互い違い（ねじれ）になる
-      // 舟形：両端（1と4相当）が同じ側に上がり、旗竿Hが近い感じ
-      //
-      // ※長さはPBDで毎フレームBOND_CCに揃えるので、
-      // ここでは「形の特徴が出る」理想的な座標を与えるのが目的
+      // c6
       if (molKey === "c6") {
         if (conformer === "chair") {
-          // “教科書っぽい椅子形”の特徴が出るように
-          // (0,2,4) と (1,3,5) が上下に分かれる＋リングがねじれる
+          // 典型的な椅子形の“上下交互”を強めたテンプレ
           return [
-            new THREE.Vector3( 1.40,  0.00,  0.85), // 1
-            new THREE.Vector3( 0.70,  1.20,  0.20), // 2
-            new THREE.Vector3(-0.70,  1.20, -0.85), // 3
-            new THREE.Vector3(-1.40,  0.00, -0.20), // 4
-            new THREE.Vector3(-0.70, -1.20,  0.85), // 5
-            new THREE.Vector3( 0.70, -1.20, -0.20), // 6
+            new THREE.Vector3( 1.55,  0.00,  0.85),
+            new THREE.Vector3( 0.78,  1.28,  0.20),
+            new THREE.Vector3(-0.78,  1.28, -0.85),
+            new THREE.Vector3(-1.55,  0.00, -0.20),
+            new THREE.Vector3(-0.78, -1.28,  0.85),
+            new THREE.Vector3( 0.78, -1.28, -0.20),
           ];
         } else {
-          // 舟形：端(1と4)が同じ側に持ち上がる。中央が少し沈む。
-          // “舟の両端が上がる”特徴を強調（旗竿Hが近づく雰囲気）
+          // 舟形（旗竿Hが近づく“両端UP”を出す）
           return [
-            new THREE.Vector3( 1.35,  0.05,  1.05), // 1 (up)
-            new THREE.Vector3( 0.75,  1.20,  0.15), // 2
-            new THREE.Vector3(-0.75,  1.10, -0.35), // 3 (down)
-            new THREE.Vector3(-1.35, -0.05,  1.05), // 4 (up)
-            new THREE.Vector3(-0.75, -1.20,  0.15), // 5
-            new THREE.Vector3( 0.75, -1.10, -0.35), // 6 (down)
+            new THREE.Vector3( 1.50,  0.10,  1.10),
+            new THREE.Vector3( 0.85,  1.30,  0.15),
+            new THREE.Vector3(-0.85,  1.15, -0.45),
+            new THREE.Vector3(-1.50, -0.10,  1.10),
+            new THREE.Vector3(-0.85, -1.30,  0.15),
+            new THREE.Vector3( 0.85, -1.15, -0.45),
           ];
         }
       }
@@ -213,83 +304,44 @@
     }
 
     // ==========
-    // PBDで隣接距離を固定
+    // 水素方向（できるだけsp3っぽく）
+    // - まず環の局所法線を出す
+    // - 「外向き」+「法線」から2方向（H2つ）を作る
+    // - c6だけは上下（z符号）を優先して“アキシャル/エクアトリアル風”を強める
     // ==========
-    function enforceBondConstraints(points, targetLen) {
-      const n = points.length;
-      for (let iter=0; iter<CONSTRAINT_ITERS; iter++) {
-        for (let i=0; i<n; i++) {
-          const j = (i+1)%n;
-          const pi = points[i];
-          const pj = points[j];
-          const d = pj.clone().sub(pi);
-          const dist = d.length();
-          if (dist < 1e-9) continue;
-          const diff = (dist - targetLen) / dist;
-          const corr = d.multiplyScalar(0.5 * CONSTRAINT_STIFF * diff);
-          pi.add(corr);
-          pj.sub(corr);
-        }
+    function hydrogenDirs(pts, i, molKey) {
+      const n = pts.length;
+      const p = pts[i];
+      const pPrev = pts[(i-1+n)%n];
+      const pNext = pts[(i+1)%n];
+
+      const v1 = pPrev.clone().sub(p).normalize();
+      const v2 = pNext.clone().sub(p).normalize();
+
+      let normal = new THREE.Vector3().crossVectors(v1, v2);
+      if (normal.lengthSq() < 1e-10) normal = new THREE.Vector3(0,0,1);
+      normal.normalize();
+
+      // outward（環の外側へ）
+      let outward = v1.clone().add(v2);
+      if (outward.lengthSq() < 1e-10) outward = new THREE.Vector3(1,0,0);
+      outward.normalize().multiplyScalar(-1);
+
+      if (molKey === "c6") {
+        // 椅子形の上下っぽさを出す（z符号を優先）
+        let sign = Math.sign(p.z);
+        if (sign === 0) sign = (i % 2 === 0) ? 1 : -1;
+
+        const axial = normal.clone().multiplyScalar(sign).normalize();
+        const equat = outward.clone().multiplyScalar(0.92).add(normal.clone().multiplyScalar(0.38*sign)).normalize();
+
+        return [axial, equat];
+      } else {
+        // 他は「平面に寝ない」ことを優先して外向き±法線
+        const d1 = outward.clone().multiplyScalar(0.85).add(normal.clone().multiplyScalar(0.65)).normalize();
+        const d2 = outward.clone().multiplyScalar(0.85).add(normal.clone().multiplyScalar(-0.65)).normalize();
+        return [d1, d2];
       }
-    }
-
-    // ==========
-    // シクロヘキサン水素：アキシャル/エクアトリアル風
-    //  - ringの局所法線(normal)をアキシャル方向の基準にする
-    //  - outwardをエクアトリアル方向の基準にする
-    //  - signは「その炭素のzの符号」を優先（椅子形の上下に従う）
-    // ==========
-    function hydrogenDirsCyclohexane(pts, i) {
-      const n = pts.length;
-      const p = pts[i];
-      const pPrev = pts[(i-1+n)%n];
-      const pNext = pts[(i+1)%n];
-
-      const v1 = pPrev.clone().sub(p).normalize();
-      const v2 = pNext.clone().sub(p).normalize();
-
-      let normal = new THREE.Vector3().crossVectors(v1, v2);
-      if (normal.lengthSq() < 1e-8) normal = new THREE.Vector3(0,0,1);
-      normal.normalize();
-
-      let outward = v1.clone().add(v2);
-      if (outward.lengthSq() < 1e-8) outward = new THREE.Vector3(1,0,0);
-      outward.normalize().multiplyScalar(-1);
-
-      // 上下：zが0付近ならインデックスで交互に（破綻防止）
-      let sign = Math.sign(p.z);
-      if (sign === 0) sign = (i % 2 === 0) ? 1 : -1;
-
-      // アキシャル：法線方向に強め
-      const axial = normal.clone().multiplyScalar(sign).normalize();
-
-      // エクアトリアル：外向き＋少し法線（同じ側に逃がす）
-      const equat = outward.clone().multiplyScalar(0.92).add(normal.clone().multiplyScalar(0.38*sign)).normalize();
-
-      return [axial, equat];
-    }
-
-    // c3-5は簡易（水素が平面に寝ないように outward±normal）
-    function hydrogenDirsGeneric(pts, i) {
-      const n = pts.length;
-      const p = pts[i];
-      const pPrev = pts[(i-1+n)%n];
-      const pNext = pts[(i+1)%n];
-
-      const v1 = pPrev.clone().sub(p).normalize();
-      const v2 = pNext.clone().sub(p).normalize();
-
-      let normal = new THREE.Vector3().crossVectors(v1, v2);
-      if (normal.lengthSq() < 1e-8) normal = new THREE.Vector3(0,0,1);
-      normal.normalize();
-
-      let outward = v1.clone().add(v2);
-      if (outward.lengthSq() < 1e-8) outward = new THREE.Vector3(1,0,0);
-      outward.normalize().multiplyScalar(-1);
-
-      const d1 = outward.clone().multiplyScalar(0.85).add(normal.clone().multiplyScalar(0.65)).normalize();
-      const d2 = outward.clone().multiplyScalar(0.85).add(normal.clone().multiplyScalar(-0.65)).normalize();
-      return [d1, d2];
     }
 
     // ==========
@@ -315,17 +367,6 @@
       cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
     }
 
-    function clearAll() {
-      carbonMeshes = [];
-      hydrogenMeshes = [];
-      ccBondMeshes = [];
-      chBondMeshes = [];
-      labelSprites = [];
-      ringPts = [];
-      ringTarget = [];
-      while(root.children.length) root.remove(root.children[0]);
-    }
-
     function addLabel(text) {
       const canvas = document.createElement("canvas");
       canvas.width = 256; canvas.height = 256;
@@ -346,6 +387,23 @@
       return spr;
     }
 
+    function clearAll() {
+      carbonMeshes = [];
+      hydrogenMeshes = [];
+      ccBondMeshes = [];
+      chBondMeshes = [];
+      labelSprites = [];
+      ringPts = [];
+      ringTarget = [];
+      while(root.children.length) root.remove(root.children[0]);
+    }
+
+    function applyVisibility() {
+      hydrogenMeshes.forEach(m => m.visible = showH);
+      chBondMeshes.forEach(m => m.visible = showH);
+      labelSprites.forEach(s => s.visible = showLabel);
+    }
+
     function recenterAndFitCamera() {
       const pts = ringPts;
       const box = new THREE.Box3();
@@ -357,34 +415,25 @@
       const size = new THREE.Vector3();
       box.getSize(size);
       const maxDim = Math.max(size.x, size.y, size.z);
-      const dist = Math.max(6, maxDim * 2.8 + 2);
+      const dist = Math.max(6, maxDim * 2.9 + 2);
       camera.position.set(0, 0, dist);
-    }
-
-    function applyVisibility() {
-      hydrogenMeshes.forEach(m => m.visible = showH);
-      chBondMeshes.forEach(m => m.visible = showH);
-      labelSprites.forEach(s => s.visible = showLabel);
     }
 
     function applyGeometryFromRing() {
       const pts = ringPts;
       const n = pts.length;
 
-      // 炭素
       for (let i=0;i<n;i++) carbonMeshes[i].position.copy(pts[i]);
 
-      // C-C結合
       for (let i=0;i<n;i++){
         const a = pts[i];
         const b = pts[(i+1)%n];
         setBondTransform(ccBondMeshes[i], a, b);
       }
 
-      // 水素（各炭素に2つ）
       let hIdx = 0;
       for (let i=0;i<n;i++){
-        const dirs = (currentMol === "c6") ? hydrogenDirsCyclohexane(pts, i) : hydrogenDirsGeneric(pts, i);
+        const dirs = hydrogenDirs(pts, i, currentMol);
         for (let k=0;k<2;k++){
           const hPos = pts[i].clone().add(dirs[k].clone().multiplyScalar(BOND_CH));
           hydrogenMeshes[hIdx].position.copy(hPos);
@@ -393,7 +442,6 @@
         }
       }
 
-      // ラベル
       for (let i=0;i<n;i++){
         labelSprites[i].position.copy(pts[i].clone().add(new THREE.Vector3(0,0.55,0)));
       }
@@ -404,17 +452,17 @@
       const text = document.getElementById("descText");
       if (currentMol === "c3") {
         title.textContent = "シクロプロパン";
-        text.textContent  = "環が小さく、ひずみが大きいと考えられます。";
+        text.textContent  = "環角（C–C–C）は60°。強い角ひずみが生じます。";
       } else if (currentMol === "c4") {
         title.textContent = "シクロブタン";
-        text.textContent  = "平面だとひずみが大きいため、折れ曲がった形をとります。";
+        text.textContent  = "環角は約90°。ひずみを減らすため折れ曲がった形になりやすいです。";
       } else if (currentMol === "c5") {
         title.textContent = "シクロペンタン";
-        text.textContent  = "エンベロープ型のように一部が持ち上がる配座をとりやすいです。";
+        text.textContent  = "環角は約108°。エンベロープ型などでひずみを減らします。";
       } else {
         title.textContent = "シクロヘキサン";
-        if (morphT < 0.5) text.textContent = "椅子形：ねじれひずみが小さく比較的安定（理想的形へ補正）。";
-        else text.textContent = "舟形：端が近づき（旗竿Hが近い）、ねじれ/立体ひずみが増えやすい（理想的形へ補正）。";
+        if (morphT < 0.5) text.textContent = "椅子形：理想的なsp³配座に近く、比較的安定。";
+        else text.textContent = "舟形：旗竿水素が近づき、ねじれ/立体ひずみが増えやすい。";
       }
     }
 
@@ -433,11 +481,11 @@
     function initMolecule(molKey) {
       clearAll();
 
-      const base = templateRing(molKey, "chair");
-      const n = base.length;
+      // 初期テンプレ → 角度/長さを拘束して“理想的”へ
+      ringPts = templateRing(molKey, "chair").map(p => p.clone());
+      relaxRing(ringPts, molKey);
 
-      ringPts = base.map(p => p.clone());
-      enforceBondConstraints(ringPts, BOND_CC);
+      const n = ringPts.length;
 
       for (let i=0;i<n;i++){
         const m = makeSphere(R_C, COLOR_C);
@@ -474,7 +522,6 @@
 
     function resetView() {
       root.rotation.set(0.35, 0.30, 0);
-
       isPlaying = false;
       isMorphing = false;
 
@@ -483,35 +530,34 @@
         morphTarget = 0;
         setC6ButtonState("chair");
         ringPts = templateRing("c6","chair").map(p=>p.clone());
+        relaxRing(ringPts, "c6");
       } else {
         ringPts = templateRing(currentMol,"chair").map(p=>p.clone());
+        relaxRing(ringPts, currentMol);
       }
-      enforceBondConstraints(ringPts, BOND_CC);
+
       recenterAndFitCamera();
       applyGeometryFromRing();
 
-      document.getElementById("playBtn").textContent = "椅子形 ⇄ 舟形 を自動再生";
+      const playBtn = document.getElementById("playBtn");
+      if (playBtn) playBtn.textContent = "椅子形 ⇄ 舟形 を自動再生";
       updateDescription();
     }
 
     // ==========
-    // 変形：理想テンプレへ寄せて、結合長拘束で補正
+    // c6 変形：テンプレ補間 → relaxRingで結合角/長さを維持しつつ収束
     // ==========
-    function updateTargetRing() {
-      if (currentMol !== "c6") return;
+    function updateTargetRingC6() {
       const chair = templateRing("c6", "chair");
       const boat  = templateRing("c6", "boat");
-
       ringTarget = [];
       for (let i=0;i<6;i++){
         ringTarget.push(chair[i].clone().lerp(boat[i], morphT));
       }
-      enforceBondConstraints(ringTarget, BOND_CC);
+      relaxRing(ringTarget, "c6");
     }
 
-    function stepMorph() {
-      if (currentMol !== "c6") return;
-
+    function stepMorphC6() {
       if (isPlaying) {
         morphT += morphDir * PLAY_SPEED;
         if (morphT >= 1) { morphT = 1; morphDir = -1; }
@@ -524,16 +570,13 @@
         else morphT += Math.sign(d) * step;
       }
 
-      updateTargetRing();
+      updateTargetRingC6();
 
-      // 目標へ追従（滑らか）
-      const follow = 0.30;
+      // 追従（滑らか）→ さらに relaxRing で角度・長さを整える
       for (let i=0;i<6;i++){
-        ringPts[i].lerp(ringTarget[i], follow);
+        ringPts[i].lerp(ringTarget[i], FOLLOW);
       }
-
-      // ★毎フレーム C–C 結合長を強制（ここが科学っぽさの下支え）
-      enforceBondConstraints(ringPts, BOND_CC);
+      relaxRing(ringPts, "c6");
 
       setC6ButtonState(morphT < 0.5 ? "chair" : "boat");
       updateDescription();
@@ -561,12 +604,11 @@
       root = new THREE.Group();
       scene.add(root);
 
-      currentMol = "c6";
-      morphT = 0;
-      morphTarget = 0;
-      setC6ButtonState("chair");
-
-      initMolecule("c6");
+      // ★初期表示：シクロプロパン
+      currentMol = "c3";
+      document.getElementById("molSelect").value = "c3";
+      document.getElementById("c6Controls").style.display = "none";
+      initMolecule("c3");
       root.rotation.set(0.35, 0.30, 0);
 
       // UI
@@ -575,15 +617,14 @@
         isPlaying = false;
         isMorphing = false;
 
-        document.getElementById("playBtn").textContent = "椅子形 ⇄ 舟形 を自動再生";
-
+        const c6Panel = document.getElementById("c6Controls");
         if (currentMol === "c6") {
-          document.getElementById("c6Controls").style.display = "block";
+          c6Panel.style.display = "block";
           morphT = 0; morphTarget = 0;
           setC6ButtonState("chair");
           initMolecule("c6");
         } else {
-          document.getElementById("c6Controls").style.display = "none";
+          c6Panel.style.display = "none";
           initMolecule(currentMol);
         }
         resetView();
@@ -629,9 +670,8 @@
 
       document.getElementById("resetBtn").addEventListener("click", resetView);
 
-      // 回転（1本指/マウス）
+      // 回転（マウス）
       const el = renderer.domElement;
-
       el.addEventListener("mousedown", (ev) => { dragging = true; lastX = ev.clientX; lastY = ev.clientY; });
       window.addEventListener("mouseup", () => dragging = false);
       window.addEventListener("mousemove", (ev) => {
@@ -674,7 +714,7 @@
           const dist = Math.hypot(dx, dy);
           if (lastPinchDist != null) {
             const delta = (lastPinchDist - dist) * 0.02;
-            camera.position.z = THREE.MathUtils.clamp(camera.position.z + delta, 3.5, 60);
+            camera.position.z = clamp(camera.position.z + delta, 3.5, 60);
           }
           lastPinchDist = dist;
         }
@@ -696,14 +736,9 @@
       animate();
     }
 
-    // ==========
-    // ループ
-    // ==========
     function animate() {
       requestAnimationFrame(animate);
-
-      if (currentMol === "c6") stepMorph();
-
+      if (currentMol === "c6") stepMorphC6();
       applyGeometryFromRing();
       renderer.render(scene, camera);
     }
