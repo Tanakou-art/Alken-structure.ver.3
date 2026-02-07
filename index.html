@@ -1,89 +1,70 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>アルカン構造シミュレーター</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>シクロアルカン構造シミュレータ</title>
 
-  <!-- PWA / iOS App Settings -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="アルカン構造">
+  <meta name="apple-mobile-web-app-title" content="シクロアルカン構造">
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1048/1048455.png">
 
-  <!-- Import Map -->
   <script type="importmap">
     {
       "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
-        "three/examples/jsm/exporters/GLTFExporter": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/exporters/GLTFExporter.js"
+        "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js"
       }
     }
   </script>
 
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Model Viewer -->
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 
   <style>
     body { margin: 0; overflow: hidden; background-color: #f3f4f6; color: #1f2937; font-family: sans-serif; touch-action: manipulation; }
-    canvas { display: block; touch-action: none; }
-    .controls {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 10;
+    canvas { display:block; touch-action:none; }
+
+    .controls{
+      position:absolute; top:20px; left:20px; z-index:10;
       background: rgba(255,255,255,0.95);
-      padding: 15px;
+      padding: 14px;
       border-radius: 12px;
-      max-width: 320px;
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      max-width: 340px;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
       border: 1px solid #e5e7eb;
       max-height: 85vh;
-      overflow-y: auto;
-      transition: transform 0.3s ease, opacity 0.3s ease;
+      overflow-y:auto;
+      transition: transform .3s ease, opacity .3s ease;
     }
-    .controls.minimized { transform: translateX(-200%); opacity: 0; pointer-events: none; }
-    .toggle-ui-btn {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 20;
-      background: #4f46e5;
-      color: white;
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 12px;
+    .controls.minimized{ transform: translateX(-200%); opacity: 0; pointer-events:none; }
+
+    .toggle-ui-btn{
+      position:absolute; top:20px; left:20px; z-index:20;
+      background:#4f46e5; color:#fff;
+      padding:8px 12px;
+      border-radius:8px;
+      font-weight:700;
+      font-size:12px;
       box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .info {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      z-index: 10;
+
+    .info{
+      position:absolute; bottom:20px; left:20px; z-index:10;
       background: rgba(255,255,255,0.9);
       padding: 12px;
       border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
       border: 1px solid #e5e7eb;
       max-width: calc(100% - 40px);
     }
-    #ar-viewer { display: none; }
-    .ar-btn { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); }
-    .struct-btn { background: #fff; border: 1px solid #d1d5db; color: #374151; min-width: calc(50% - 0.5rem); }
-    .struct-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
-    .hidden { display: none; }
 
-    .mini-btn { border: 1px solid #d1d5db; background: #fff; color:#374151; }
-    .mini-btn.active { background:#111827; color:#fff; border-color:#111827; }
+    .mini-btn{ border:1px solid #d1d5db; background:#fff; color:#374151; }
+    .mini-btn.active{ background:#111827; color:#fff; border-color:#111827; }
 
-    @media (max-width: 768px) {
-      .controls { top: 10px; left: 10px; width: 280px; padding: 12px; }
-      .toggle-ui-btn { top: 10px; left: 10px; }
-      .info { bottom: 10px; left: 10px; }
+    @media (max-width: 768px){
+      .controls{ top:10px; left:10px; width: 300px; padding:12px; }
+      .toggle-ui-btn{ top:10px; left:10px; }
+      .info{ bottom:10px; left:10px; }
     }
   </style>
 </head>
@@ -92,159 +73,128 @@
   <button id="toggleUIPanel" class="toggle-ui-btn hidden">メニュー表示</button>
 
   <div id="controlsPanel" class="controls">
-    <div class="flex justify-between items-center mb-4">
-      <h1 class="text-lg font-bold text-indigo-600">アルカン構造</h1>
+    <div class="flex justify-between items-center mb-3">
+      <h1 class="text-lg font-bold text-indigo-600">シクロアルカン構造</h1>
       <button id="hideUIPanel" class="text-xs bg-gray-100 px-3 py-1.5 rounded-lg text-gray-500 hover:bg-gray-200 ml-4">閉じる</button>
     </div>
 
     <div class="mb-3">
-      <label class="block mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">炭素数</label>
-      <select id="carbonSelect" class="bg-white border border-gray-300 rounded-lg p-2.5 w-full text-sm outline-none focus:ring-2 focus:ring-indigo-500">
-        <option value="1" selected>C1: メタン</option>
-        <option value="2">C2: エタン</option>
-        <option value="3">C3: プロパン</option>
-        <option value="4">C4: ブタン</option>
-        <option value="5">C5: ペンタン</option>
-        <option value="6">C6: ヘキサン</option>
-        <option value="7">C7: ヘプタン</option>
-        <option value="8">C8: オクタン</option>
+      <label class="block mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">分子を選択</label>
+      <select id="ringSelect" class="bg-white border border-gray-300 rounded-lg p-2.5 w-full text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+        <option value="3" selected>シクロプロパン (C3H6)</option>
+        <option value="4">シクロブタン (C4H8)</option>
+        <option value="5">シクロペンタン (C5H10)</option>
+        <option value="6">シクロヘキサン (C6H12)</option>
+        <option value="7">シクロヘプタン (C7H14)</option>
+        <option value="8">シクロオクタン (C8H16)</option>
       </select>
     </div>
 
-    <div id="isomerControls" class="mb-4">
-      <label id="isomerLabel" class="block mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">異性体を選択</label>
-      <div id="isomerButtons" class="flex gap-2 flex-wrap max-h-48 overflow-y-auto pr-1"></div>
+    <div id="cycloHexControls" class="mb-3 hidden">
+      <label class="block mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">シクロヘキサン配座</label>
+      <div class="grid grid-cols-2 gap-2">
+        <button id="toggleConformation" class="bg-indigo-600 text-white font-bold py-2 rounded-xl text-[10px] hover:brightness-110 transition">
+          椅子型 ⇄ 舟形
+        </button>
+        <button id="playConformation" class="mini-btn font-bold py-2 rounded-xl text-[10px] transition">
+          動画再生 OFF
+        </button>
+      </div>
+      <div class="mt-2 text-[10px] text-gray-500 leading-relaxed">
+        「椅子型 ⇄ 舟形」：1回だけ変形<br>
+        「動画再生」：椅子型⇄舟形を繰り返し
+      </div>
     </div>
 
     <div class="grid grid-cols-2 gap-2 mb-3">
-      <button id="toggleLabels" class="bg-blue-500 text-white font-bold py-2 rounded-xl text-[10px] hover:bg-blue-600 transition">炭素番号</button>
-      <button id="toggleElectrons" class="bg-amber-500 text-white font-bold py-2 rounded-xl text-[10px] hover:bg-amber-600 transition">電子対</button>
+      <button id="resetViewBtn" class="bg-white border border-gray-200 py-2 rounded-xl text-[10px] text-gray-600 font-bold hover:bg-gray-50">
+        視点リセット
+      </button>
+      <button id="toggleHydrogen" class="mini-btn font-bold py-2 rounded-xl text-[10px] transition active">
+        水素表示 ON
+      </button>
     </div>
 
-    <div class="grid grid-cols-2 gap-2 mb-3">
-      <button id="toggleVDW" class="mini-btn font-bold py-2 rounded-xl text-[10px] transition">表面(vdW)</button>
-      <button id="autoPlayBtn" class="bg-indigo-600 text-white text-[10px] w-full py-2 rounded-xl font-bold shadow-sm">自動回転 ON</button>
+    <div class="grid grid-cols-2 gap-2 mb-2">
+      <button id="toggleLabels" class="mini-btn font-bold py-2 rounded-xl text-[10px] transition">
+        炭素番号 OFF
+      </button>
+      <button id="autoRotateBtn" class="bg-emerald-600 text-white font-bold py-2 rounded-xl text-[10px] hover:brightness-110 transition">
+        自動回転 ON
+      </button>
     </div>
 
-    <div id="rotationControls" class="mb-4 space-y-1.5 max-h-32 overflow-y-auto pr-1 border-t border-gray-100 pt-3"></div>
-
-    <div class="mb-3">
-      <button id="resetViewBtn" class="bg-white border border-gray-200 py-2 rounded-lg text-[10px] text-gray-500 font-bold w-full hover:bg-gray-50">視点リセット</button>
-    </div>
-
-    <button id="startAR" class="ar-btn text-white font-bold py-3 rounded-xl w-full flex items-center justify-center gap-2 shadow-lg text-sm hover:brightness-110 transition">
-      空間モードで見る (AR)
-    </button>
-
-    <div class="mt-3 text-[10px] text-gray-500 leading-relaxed">
+    <div class="mt-2 text-[10px] text-gray-500 leading-relaxed">
       1本指ドラッグ：回転<br>
-      ピンチ：拡大・縮小（ズーム）<br>
-      表面(vdW)：分子の外形（接触しやすさのイメージ）を表示
+      ピンチ：拡大・縮小（ズーム）
     </div>
   </div>
 
-  <!-- Hidden AR Viewer -->
-  <model-viewer id="ar-viewer" ar ar-modes="webxr quick-look" camera-controls touch-action="none" style="display:none;"></model-viewer>
-
   <div id="description" class="info">
-    <h2 id="molTitle" class="font-bold text-sm text-gray-800">メタン</h2>
-    <p id="molDesc" class="text-[10px] text-gray-600">炭素原子(黒)と水素原子(水色)の結合角は約109.5度です。</p>
-
-    <div class="mt-2 text-[10px] text-gray-700">
-      <div class="flex flex-wrap gap-x-3 gap-y-1">
-        <span id="metricSurface">表面積スコア: -</span>
-        <span id="metricElong">細長さ: -</span>
-        <span id="metricSph">球らしさ: -</span>
-      </div>
-      <div class="mt-1 text-[9px] text-gray-500">
-        ※スコアは“外側に露出した表面”の目安（比較用）。厳密な物理量ではありません。
-      </div>
-    </div>
+    <h2 id="molTitle" class="font-bold text-sm text-gray-800">シクロプロパン</h2>
+    <p id="molDesc" class="text-[10px] text-gray-600">
+      シクロアルカンは環状構造をもちます。シクロヘキサンは配座（椅子型・舟形）をとります。
+    </p>
   </div>
 
   <script type="module">
-    import * as THREE from 'three';
-    import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter';
+    import * as THREE from "three";
 
-    // Global variables
-    let scene, camera, renderer, moleculeGroup, vdwGroup;
-    let showElectrons = false, showLabels = false, showVDW = false;
-    let currentIsomerIndex = 0, isGlobalAutoPlaying = false;
-    let rotationMap = {}, rotationFlags = {}, activeControls = [];
-    let atoms = []; // {pos:Vector3, r:number, type:'C'|'H'}
+    // ====== Scene ======
+    let scene, camera, renderer;
+    let moleculeGroup;
+    let showHydrogen = true;
+    let showLabels = false;
 
-    // zoom
+    // rotation/zoom
+    let isAutoRotate = true;
     let zoomScale = 1.0;
-    const ZOOM_MIN = 0.35;
-    const ZOOM_MAX = 3.5;
+    const ZOOM_MIN = 0.35, ZOOM_MAX = 3.5;
 
-    // Bond/visual radii
-    const BOND_CC = 1.54, BOND_CH = 1.09;
-    const RADIUS_C = 0.4, RADIUS_H = 0.25, RADIUS_E = 0.08;
+    // ====== Geometry params ======
+    const BOND_CC = 1.54;
+    const BOND_CH = 1.09;
 
-    // vdW shell radii (教材用の見た目：やや大きめ)
-    const VDW_R_C = 0.68;
-    const VDW_R_H = 0.55;
+    const RADIUS_C = 0.40;
+    const RADIUS_H = 0.25;
 
-    const COS_TETRA = -1/3;
-    const TETRA_ANGLE = Math.acos(COS_TETRA);
-    const BEND_ANGLE = Math.PI - TETRA_ANGLE;
-
-    // ---- Helpers ----
-    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-    function createNode(type, children = [], iupac = null) {
-      return { type, id: Math.random().toString(36).substr(2, 9), children: [...children], iupac };
+    // Ring radius (approx so that neighbor distance ~1.54)
+    function ringRadius(n){
+      // side length s = 2R sin(pi/n) => R = s/(2 sin(pi/n))
+      return BOND_CC / (2 * Math.sin(Math.PI / n));
     }
 
-    function fillH(node) {
-      if (!node || node.type !== 'C') return node;
-      const cNeighbors = node.children.filter(c => c.type === 'C').length;
-      const hCount = 4 - cNeighbors;
-      for (let i = 0; i < hCount; i++) node.children.push(createNode('H'));
-      node.children.forEach(child => { if (child.type === 'C') fillH(child); });
-      return node;
-    }
+    // ====== Objects references ======
+    let carbonMeshes = [];
+    let hydrogenMeshes = [];
+    let bondCCMeshes = [];
+    let bondCHMeshes = [];
+    let labelSprites = [];
 
-    // ---- Isomer Data ----
-    const ISOMERS = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [], 8: [] };
-    const C = (num, children = []) => createNode('C', children, num.toString());
+    // ====== Cyclohexane conformation animation ======
+    let currentRing = 3;
+    let conformation = "chair"; // for n=6 only: 'chair' or 'boat'
+    let targetConformation = "chair";
+    let confT = 0;            // 0->1 interpolation chair->boat (or reverse depending on start/end)
+    let confAnimating = false;
+    let confLoopPlaying = false;
 
-    ISOMERS[1].push({ name: "メタン", desc: "最も単純な炭化水素。", root: fillH(C(1)) });
-    ISOMERS[2].push({ name: "エタン", desc: "炭素2つのアルカン。", root: fillH(C(1, [C(2)])) });
-    ISOMERS[3].push({ name: "プロパン", desc: "燃料に広く使われます。", root: fillH(C(2, [C(1), C(3)])) });
+    // ====== UI elements ======
+    const elRing = document.getElementById("ringSelect");
+    const elCycloHexControls = document.getElementById("cycloHexControls");
+    const elToggleConf = document.getElementById("toggleConformation");
+    const elPlayConf = document.getElementById("playConformation");
+    const elToggleHydrogen = document.getElementById("toggleHydrogen");
+    const elToggleLabels = document.getElementById("toggleLabels");
+    const elAutoRotate = document.getElementById("autoRotateBtn");
+    const elReset = document.getElementById("resetViewBtn");
+    const elTitle = document.getElementById("molTitle");
+    const elDesc = document.getElementById("molDesc");
 
-    ISOMERS[4].push({ name: "ブタン", desc: "炭素4つの直鎖アルカン。", root: fillH(C(2, [C(1), C(3, [C(4)])])) });
-    ISOMERS[4].push({ name: "2-メチルプロパン", desc: "枝分かれ構造の代表例。", root: fillH(C(2, [C(1), C(3), C("M")])) });
-
-    ISOMERS[5].push({ name: "ペンタン", desc: "炭素5つの直鎖アルカン。", root: fillH(C(3, [C(2, [C(1)]), C(4, [C(5)])])) });
-    ISOMERS[5].push({ name: "2-メチルブタン", desc: "ペンタンの分岐異性体。", root: fillH(C(2, [C(1), C(3, [C(4)]), C("M")])) });
-    ISOMERS[5].push({ name: "2,2-ジメチルプロパン", desc: "非常にコンパクトな構造。", root: fillH(C(2, [C(1), C(3), C("M1"), C("M2")])) });
-
-    ISOMERS[6].push({ name: "ヘキサン", desc: "直鎖のヘキサン。", root: fillH(C(3, [C(2, [C(1)]), C(4, [C(5, [C(6)])])])) });
-    ISOMERS[6].push({ name: "2-メチルペンタン", desc: "主鎖5本の異性体。", root: fillH(C(2, [C(1), C(3, [C(4, [C(5)])]), C("M")])) });
-    ISOMERS[6].push({ name: "3-メチルペンタン", desc: "主鎖の真ん中に枝がある構造。", root: fillH(C(3, [C(2, [C(1)]), C(4, [C(5)]), C("M")])) });
-    ISOMERS[6].push({ name: "2,2-ジメチルブタン", desc: "主鎖4本に同じ位置の枝。", root: fillH(C(2, [C(1), C(3, [C(4)]), C("M1"), C("M2")])) });
-    ISOMERS[6].push({ name: "2,3-ジメチルブタン", desc: "主鎖4本に異なる位置の枝。", root: fillH(C(2, [C(1), C(3, [C(4), C("M2")]), C("M1")])) });
-
-    ISOMERS[7].push({ name: "ヘプタン", desc: "直鎖のヘプタン。", root: fillH(C(4, [C(3, [C(2, [C(1)])]), C(5, [C(6, [C(7)])])])) });
-    ISOMERS[7].push({ name: "2-メチルヘキサン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(2, [C(1), C(3, [C(4, [C(5, [C(6)])])]), C("M")])) });
-    ISOMERS[7].push({ name: "3-メチルヘキサン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(3, [C(2, [C(1)]), C(4, [C(5, [C(6)])]), C("M")])) });
-    ISOMERS[7].push({ name: "2,2-ジメチルペンタン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(2, [C(1), C(3, [C(4, [C(5)])]), C("M1"), C("M2")])) });
-    ISOMERS[7].push({ name: "2,3-ジメチルペンタン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(3, [C(2, [C(1), C("M1")]), C(4, [C(5)]), C("M2")])) });
-    ISOMERS[7].push({ name: "2,4-ジメチルペンタン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(3, [C(2, [C(1), C("M1")]), C(4, [C(5), C("M2")])])) });
-    ISOMERS[7].push({ name: "3,3-ジメチルペンタン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(3, [C(2, [C(1)]), C(4, [C(5)]), C("M1"), C("M2")])) });
-    ISOMERS[7].push({ name: "3-エチルペンタン", desc: "エチル基の枝分かれ。", root: fillH(C(3, [C(2, [C(1)]), C(4, [C(5)]), C("E1", [C("E2")])])) });
-    ISOMERS[7].push({ name: "2,2,3-トリメチルブタン", desc: "ヘプタンの異性体(代表例)。", root: fillH(C(2, [C(1), C(3, [C(4), C("M3")]), C("M1"), C("M2")])) });
-
-    // C8（※「イソオクタン」表記は一切なし）
-    ISOMERS[8].push({ name: "オクタン", desc: "直鎖のオクタン。", root: fillH(C(4, [C(3, [C(2, [C(1)])]), C(5, [C(6, [C(7, [C(8)])])])])) });
-    ISOMERS[8].push({ name: "2,2,4-トリメチルペンタン", desc: "オクタンの代表的な分岐異性体。", root: fillH(C(4, [C(3, [C(2, [C(1), C("M1"), C("M2")])]), C(5), C("M3")])) });
-    ISOMERS[8].push({ name: "2-メチルヘプタン", desc: "主鎖が7本で、2番目に枝分かれがある構造。", root: fillH(C(4, [C(3, [C(2, [C(1), C("M")])]), C(5, [C(6, [C(7)])])])) });
-
-    function init() {
+    // ====== init ======
+    function init(){
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
       camera.position.set(0, 0, 10);
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -254,390 +204,476 @@
       document.body.appendChild(renderer.domElement);
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-      const light = new THREE.DirectionalLight(0xffffff, 0.6);
-      light.position.set(5, 10, 7);
+      const light = new THREE.DirectionalLight(0xffffff, 0.7);
+      light.position.set(6, 10, 7);
       scene.add(light);
 
       moleculeGroup = new THREE.Group();
-      vdwGroup = new THREE.Group();
       scene.add(moleculeGroup);
-      scene.add(vdwGroup);
 
       setupInteractions();
-      updateUI();
+      updateMoleculeFromUI();
       animate();
     }
 
-    // ---- 3D build ----
-    function build3D(node, position, incomingVec, refNormal) {
-      if (!node || !moleculeGroup) return;
+    // ====== build helpers ======
+    function clearGroup(){
+      while(moleculeGroup.children.length > 0) moleculeGroup.remove(moleculeGroup.children[0]);
+      carbonMeshes = [];
+      hydrogenMeshes = [];
+      bondCCMeshes = [];
+      bondCHMeshes = [];
+      labelSprites = [];
+    }
 
-      const isC = node.type === 'C';
-      const mat = new THREE.MeshPhongMaterial({ color: isC ? 0x333333 : 0xadd8e6 });
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(isC ? RADIUS_C : RADIUS_H, 20, 20), mat);
-      mesh.position.copy(position);
-      if (isC) mesh.userData.atomType = 'C';
-      mesh.userData.isAtom = true;
-      moleculeGroup.add(mesh);
+    function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
-      // 解析用に原子を記録（※表示半径ではなくvdW半径で記録）
-      atoms.push({
-        pos: position.clone(),
-        r: isC ? VDW_R_C : VDW_R_H,
-        type: isC ? 'C' : 'H'
-      });
+    function makeAtomSphere(radius, color){
+      const geo = new THREE.SphereGeometry(radius, 20, 20);
+      const mat = new THREE.MeshPhongMaterial({ color });
+      return new THREE.Mesh(geo, mat);
+    }
 
-      if (isC && showLabels && node.iupac) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 128; canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        ctx.font = 'bold 80px Arial';
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.fillText(node.iupac, 64, 90);
-        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), depthTest: false }));
-        sprite.position.copy(position);
-        sprite.scale.set(0.6, 0.6, 1);
-        moleculeGroup.add(sprite);
+    function makeBondCylinder(length, radius, color, opacity=1){
+      const geo = new THREE.CylinderGeometry(radius, radius, length, 14);
+      const mat = new THREE.MeshPhongMaterial({ color, transparent: opacity < 1, opacity });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    function setCylinderBetween(cyl, a, b){
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const len = dir.length();
+      cyl.scale.set(1, 1, 1);
+      cyl.geometry.dispose();
+      cyl.geometry = new THREE.CylinderGeometry(cyl.userData.radius, cyl.userData.radius, len, 14);
+
+      cyl.position.copy(a).add(b).multiplyScalar(0.5);
+      cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+    }
+
+    // label sprite
+    function makeLabelSprite(text){
+      const canvas = document.createElement("canvas");
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0,0,128,128);
+      ctx.font = "bold 72px Arial";
+      ctx.fillStyle = "white";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, 64, 70);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(0.6, 0.6, 1);
+      return sp;
+    }
+
+    // ====== Ring coordinate generators ======
+    // Base planar polygon in XY
+    function baseRingXY(n){
+      const R = ringRadius(n);
+      const pts = [];
+      for(let i=0;i<n;i++){
+        const ang = (i / n) * Math.PI * 2;
+        pts.push(new THREE.Vector3(R * Math.cos(ang), R * Math.sin(ang), 0));
+      }
+      return pts;
+    }
+
+    // Simple puckering for n!=6 (visual only)
+    // (n=3,4 planar; n>=5 use alternating z)
+    function applyPucker(n, pts){
+      if (n <= 4) return pts;
+
+      const amp = 0.55; // visual
+      for(let i=0;i<n;i++){
+        // alternate z up/down; for odd n, shift pattern
+        const sign = (i % 2 === 0) ? 1 : -1;
+        pts[i].z = amp * sign * (n === 5 ? 0.6 : 1.0);
+      }
+      return pts;
+    }
+
+    // Cyclohexane chair and boat target coordinates (visual model)
+    function cycloHexChair(){
+      // start from hexagon XY, then apply chair-like z + slight XY warp
+      const pts = baseRingXY(6);
+
+      // chair z (alternating up/down)
+      const z = [ 0.65, -0.65, 0.65, -0.65, 0.65, -0.65 ];
+      for(let i=0;i<6;i++){
+        pts[i].z = z[i];
+      }
+      // small warp to make it look more chair-like
+      // pull two opposite carbons a bit
+      pts[0].x *= 1.02; pts[3].x *= 1.02;
+      pts[1].y *= 0.98; pts[4].y *= 0.98;
+
+      return pts;
+    }
+
+    function cycloHexBoat(){
+      const pts = baseRingXY(6);
+
+      // boat: two "ends" up, middle down-ish
+      const z = [ 0.85, 0.20, -0.45, -0.45, 0.20, 0.85 ];
+      for(let i=0;i<6;i++){
+        pts[i].z = z[i];
       }
 
-      const children = node.children || [];
-      if (children.length === 0) return;
+      // bring ends closer (bow/stern)
+      // move vertices 0 and 5 slightly inward toward center
+      pts[0].multiplyScalar(0.93);
+      pts[5].multiplyScalar(0.93);
 
-      let targetDirs = [];
-      let nextRefNormal = refNormal ? refNormal.clone() : new THREE.Vector3(0, 0, 1);
+      // slight twist feel
+      pts[2].x *= 1.03;
+      pts[3].x *= 1.03;
 
-      if (!incomingVec) {
-        const angle = (180 - 109.47) * Math.PI / 180 / 2;
-        const dy = Math.sin(angle);
-        const dx = Math.cos(angle);
-        targetDirs = [
-          new THREE.Vector3(dx, dy, 0),
-          new THREE.Vector3(-dx, dy, 0),
-          new THREE.Vector3(0, -1, Math.sqrt(2)).normalize(),
-          new THREE.Vector3(0, -1, -Math.sqrt(2)).normalize()
-        ];
+      return pts;
+    }
+
+    function lerpVec(a, b, t){
+      return new THREE.Vector3(
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t,
+        a.z + (b.z - a.z) * t
+      );
+    }
+
+    // ====== Construct molecule (ring + H) ======
+    function buildCycloalkane(n){
+      clearGroup();
+
+      // --- ring carbon positions ---
+      let carbonPos;
+      if (n === 6){
+        // initial conformation
+        carbonPos = (conformation === "chair") ? cycloHexChair() : cycloHexBoat();
       } else {
-        const axis = incomingVec.clone().normalize();
-        const tangent = new THREE.Vector3().crossVectors(refNormal, axis).normalize();
-        let twist = Math.PI + (node.type === 'C' ? (rotationMap[node.id] || 0) : 0);
-        const bentNormal = tangent.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, twist));
-        const finalDir = axis.clone().multiplyScalar(Math.cos(BEND_ANGLE)).add(bentNormal.multiplyScalar(Math.sin(BEND_ANGLE))).normalize();
-        targetDirs = [0, 1, 2].map(k => finalDir.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(axis, k * (2 * Math.PI / 3))));
-        nextRefNormal = new THREE.Vector3().crossVectors(axis, finalDir).normalize();
+        carbonPos = applyPucker(n, baseRingXY(n));
       }
 
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i];
-        if (i >= targetDirs.length) break;
+      // --- create carbon meshes ---
+      for(let i=0;i<n;i++){
+        const c = makeAtomSphere(RADIUS_C, 0x333333);
+        c.position.copy(carbonPos[i]);
+        c.userData.isCarbon = true;
+        c.userData.index = i+1;
+        moleculeGroup.add(c);
+        carbonMeshes.push(c);
 
-        const dir = targetDirs[i];
-        const bondLen = child.type === 'C' ? BOND_CC : BOND_CH;
-        const childPos = position.clone().add(dir.clone().multiplyScalar(bondLen));
-        const bDir = new THREE.Vector3().subVectors(childPos, position);
-
-        const bMesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(child.type === 'C' ? 0.08 : 0.04, child.type === 'C' ? 0.08 : 0.04, bDir.length(), 12),
-          new THREE.MeshPhongMaterial({ color: 0xcccccc, transparent: showElectrons, opacity: showElectrons ? 0.3 : 1 })
-        );
-        bMesh.position.copy(position).add(bDir.clone().multiplyScalar(0.5));
-        bMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bDir.clone().normalize());
-        moleculeGroup.add(bMesh);
-
-        if (showElectrons) {
-          const eGeo = new THREE.SphereGeometry(RADIUS_E, 8, 8);
-          const eMat = new THREE.MeshPhongMaterial({ color: 0xffff00 });
-          const side = new THREE.Vector3().crossVectors(
-            bDir,
-            Math.abs(bDir.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)
-          ).normalize();
-          [-0.1, 0.1].forEach(off => {
-            const e = new THREE.Mesh(eGeo, eMat);
-            e.position.copy(bMesh.position).add(side.clone().multiplyScalar(off));
-            moleculeGroup.add(e);
-          });
+        if (showLabels){
+          const sp = makeLabelSprite(String(i+1));
+          sp.position.copy(carbonPos[i]).add(new THREE.Vector3(0, 0.55, 0));
+          moleculeGroup.add(sp);
+          labelSprites.push(sp);
         }
-
-        const specificNormal = incomingVec ? nextRefNormal : new THREE.Vector3().crossVectors(new THREE.Vector3(0, 0, 1), dir).normalize();
-        if (!incomingVec && specificNormal.lengthSq() < 0.001) specificNormal.crossVectors(new THREE.Vector3(0, 1, 0), dir).normalize();
-
-        build3D(child, childPos, dir, specificNormal);
-      }
-    }
-
-    // ---- “横向き”整列（主軸をXへ）----
-    function orientMoleculeHorizontal() {
-      const carbons = [];
-      moleculeGroup.traverse(child => {
-        if (child.isMesh && child.userData.isAtom && child.userData.atomType === 'C') carbons.push(child);
-      });
-      if (carbons.length < 2) return;
-
-      const center = new THREE.Vector3();
-      carbons.forEach(c => center.add(c.position));
-      center.divideScalar(carbons.length);
-
-      let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
-      carbons.forEach(c => {
-        const p = c.position.clone().sub(center);
-        xx += p.x * p.x; xy += p.x * p.y; xz += p.x * p.z;
-        yy += p.y * p.y; yz += p.y * p.z; zz += p.z * p.z;
-      });
-
-      let v = new THREE.Vector3(1, 1, 1).normalize();
-      for (let i = 0; i < 10; i++) {
-        const nextV = new THREE.Vector3(
-          xx * v.x + xy * v.y + xz * v.z,
-          xy * v.x + yy * v.y + yz * v.z,
-          xz * v.x + yz * v.y + zz * v.z
-        );
-        if (nextV.lengthSq() < 0.0001) break;
-        v = nextV.normalize();
       }
 
-      const targetAxis = new THREE.Vector3(1, 0, 0);
-      const q = new THREE.Quaternion().setFromUnitVectors(v, targetAxis);
-
-      moleculeGroup.children.forEach(child => {
-        child.position.applyQuaternion(q);
-        child.quaternion.premultiply(q);
-      });
-
-      // atoms配列側も回す
-      atoms.forEach(a => a.pos.applyQuaternion(q));
-    }
-
-    // ---- vdW 表面表示（原子のvdW殻を半透明で重ねる）----
-    function rebuildVDWShells() {
-      while (vdwGroup.children.length > 0) vdwGroup.remove(vdwGroup.children[0]);
-      if (!showVDW) return;
-
-      const cMat = new THREE.MeshPhongMaterial({ color: 0x111827, transparent: true, opacity: 0.13, depthWrite: false });
-      const hMat = new THREE.MeshPhongMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.10, depthWrite: false });
-
-      // できるだけ軽く
-      const geoC = new THREE.SphereGeometry(VDW_R_C, 18, 18);
-      const geoH = new THREE.SphereGeometry(VDW_R_H, 14, 14);
-
-      for (const a of atoms) {
-        const m = new THREE.Mesh(a.type === 'C' ? geoC : geoH, a.type === 'C' ? cMat : hMat);
-        m.position.copy(a.pos);
-        vdwGroup.add(m);
-      }
-    }
-
-    // ---- 表面積スコア（露出面の目安：Monte Carlo）----
-    function estimateSurfaceAreaScore(samplesPerAtom = 180) {
-      if (!atoms || atoms.length === 0) return null;
-
-      let total = 0;
-
-      // ランダム点生成（球面一様）
-      function randOnSphere() {
-        const u = Math.random();
-        const v = Math.random();
-        const theta = 2 * Math.PI * u;
-        const z = 2 * v - 1;
-        const r = Math.sqrt(1 - z * z);
-        return new THREE.Vector3(r * Math.cos(theta), r * Math.sin(theta), z);
+      // --- C-C bonds (ring) ---
+      for(let i=0;i<n;i++){
+        const j = (i+1) % n;
+        const a = carbonPos[i], b = carbonPos[j];
+        const bond = makeBondCylinder(1, 0.08, 0xcccccc);
+        bond.userData.radius = 0.08;
+        moleculeGroup.add(bond);
+        bondCCMeshes.push({ mesh: bond, i, j });
+        setBondNow(bond, a, b, 0.08);
       }
 
-      for (let i = 0; i < atoms.length; i++) {
-        const ai = atoms[i];
-        let exposed = 0;
-
-        for (let s = 0; s < samplesPerAtom; s++) {
-          const dir = randOnSphere();
-          const p = ai.pos.clone().add(dir.multiplyScalar(ai.r));
-
-          // 他原子の球に埋もれていないかチェック
-          let buried = false;
-          for (let j = 0; j < atoms.length; j++) {
-            if (j === i) continue;
-            const aj = atoms[j];
-            if (p.distanceToSquared(aj.pos) < (aj.r * aj.r)) { buried = true; break; }
-          }
-          if (!buried) exposed++;
-        }
-
-        const frac = exposed / samplesPerAtom;
-        total += (4 * Math.PI * ai.r * ai.r) * frac;
-      }
-
-      return total;
-    }
-
-    // ---- 形の指標（“接触しやすい形”の目安）----
-    function computeShapeMetrics() {
-      // atomsの外接ボックス
-      const box = new THREE.Box3();
-      for (const a of atoms) box.expandByPoint(a.pos);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-
-      // 長さ順に並べる
-      const dims = [size.x, size.y, size.z].sort((a,b)=>b-a);
-      const L = Math.max(dims[0], 1e-6);
-      const M = Math.max(dims[1], 1e-6);
-      const S = Math.max(dims[2], 1e-6);
-
-      // 細長さ（大きいほど細長い）
-      const elong = L / ((M + S) / 2);
-
-      // 球らしさ（1に近いほど球形っぽい）
-      // ※簡易：短軸/長軸（0〜1）
-      const sph = S / L;
-
-      return { elong, sph };
-    }
-
-    // ---- Molecule update ----
-    function updateMolecule() {
-      if (!moleculeGroup) return;
-
-      // clear
-      while (moleculeGroup.children.length > 0) moleculeGroup.remove(moleculeGroup.children[0]);
-      while (vdwGroup.children.length > 0) vdwGroup.remove(vdwGroup.children[0]);
-      atoms = [];
-
-      const carbonValue = document.getElementById('carbonSelect').value;
-      const iso = ISOMERS[carbonValue][currentIsomerIndex];
-
-      if (iso && iso.root) {
-        build3D(iso.root, new THREE.Vector3(0, 0, 0), null);
-
-        // center
-        const box = new THREE.Box3().setFromObject(moleculeGroup);
+      // --- Hydrogens (simple outward model) ---
+      // cycloalkane C_nH_2n : each carbon has 2 hydrogens
+      if (showHydrogen){
         const center = new THREE.Vector3();
-        box.getCenter(center);
-        moleculeGroup.children.forEach(c => c.position.sub(center));
-        atoms.forEach(a => a.pos.sub(center));
+        carbonPos.forEach(p => center.add(p));
+        center.divideScalar(n);
 
-        // horizontal align
-        orientMoleculeHorizontal();
+        for(let i=0;i<n;i++){
+          const p = carbonPos[i];
 
-        // camera fit
-        const newBox = new THREE.Box3().setFromObject(moleculeGroup);
-        const size = new THREE.Vector3();
-        newBox.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        let dist = Math.max(6, maxDim * 2.2 + 2);
-        if (camera.aspect < 1.0) dist *= 1.5;
-        camera.position.set(0, 0, dist);
+          // outward direction from center (with z)
+          const out = p.clone().sub(center).normalize();
+          // perpendicular direction to give 2 H (approx)
+          const tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
+          if (tangent.lengthSq() < 1e-6) tangent.set(1,0,0);
+
+          const dirs = [
+            out.clone().add(tangent.clone().multiplyScalar(0.35)).normalize(),
+            out.clone().add(tangent.clone().multiplyScalar(-0.35)).normalize()
+          ];
+
+          for(let k=0;k<2;k++){
+            const hPos = p.clone().add(dirs[k].multiplyScalar(BOND_CH));
+            const h = makeAtomSphere(RADIUS_H, 0xadd8e6);
+            h.position.copy(hPos);
+            moleculeGroup.add(h);
+            hydrogenMeshes.push(h);
+
+            const bond = makeBondCylinder(1, 0.04, 0xcccccc);
+            bond.userData.radius = 0.04;
+            moleculeGroup.add(bond);
+            bondCHMeshes.push({ mesh: bond, cIndex: i, hIndex: hydrogenMeshes.length - 1 });
+            setBondNow(bond, p, hPos, 0.04);
+          }
+        }
       }
 
-      // rebuild surface shells
-      rebuildVDWShells();
-
-      // update metrics display
-      const metrics = computeShapeMetrics();
-      const metricEl = document.getElementById('metricElong');
-      const metricSp = document.getElementById('metricSph');
-      metricEl.textContent = `細長さ: ${metrics.elong.toFixed(2)}`;
-      metricSp.textContent = `球らしさ: ${metrics.sph.toFixed(2)}`;
-
-      // surface score (only meaningful when showVDW ON; still okay to compute regardless but cost)
-      const metricSa = document.getElementById('metricSurface');
-      if (!showVDW) {
-        metricSa.textContent = `表面積スコア: -`;
-      } else {
-        // 自動回転中は軽めサンプル
-        const samples = isGlobalAutoPlaying ? 70 : 180;
-        const score = estimateSurfaceAreaScore(samples);
-        metricSa.textContent = (score == null) ? `表面積スコア: -` : `表面積スコア: ${score.toFixed(1)}`;
-      }
-
+      // center and camera fit
+      recenterAndFitCamera();
       resetView(false);
     }
 
-    function resetView(resetZoom = true) {
-      if (!moleculeGroup) return;
+    function setBondNow(bondMesh, a, b, radius){
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const len = dir.length();
+      bondMesh.geometry.dispose();
+      bondMesh.geometry = new THREE.CylinderGeometry(radius, radius, len, 14);
+      bondMesh.position.copy(a).add(b).multiplyScalar(0.5);
+      bondMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+    }
+
+    function recenterAndFitCamera(){
+      const box = new THREE.Box3().setFromObject(moleculeGroup);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      moleculeGroup.children.forEach(obj => obj.position.sub(center));
+
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      let dist = Math.max(6, maxDim * 2.3 + 2);
+      if (camera.aspect < 1.0) dist *= 1.4;
+      camera.position.set(0, 0, dist);
+    }
+
+    // ====== Cyclohexane dynamic morph ======
+    function updateCyclohexaneMorph(dt){
+      if (currentRing !== 6) return;
+
+      if (confLoopPlaying){
+        // loop: chair <-> boat continuously
+        confT += dt * 0.6; // speed
+        const phase = (Math.sin(confT * Math.PI * 2) + 1) / 2; // 0..1
+        applyConformationBlend(phase);
+        return;
+      }
+
+      if (!confAnimating) return;
+
+      // one-shot morph toward target
+      const speed = 0.9;
+      confT += dt * speed;
+      if (confT >= 1){
+        confT = 1;
+        confAnimating = false;
+        conformation = targetConformation;
+      }
+      const t = easeInOut(confT);
+      if (conformation === "chair" && targetConformation === "boat"){
+        applyConformationBlend(t); // chair->boat
+      } else if (conformation === "boat" && targetConformation === "chair"){
+        applyConformationBlend(1 - t); // boat->chair (invert)
+      } else {
+        applyConformationBlend(conformation === "chair" ? 0 : 1);
+        confAnimating = false;
+      }
+    }
+
+    function easeInOut(t){
+      // smoothstep
+      return t * t * (3 - 2 * t);
+    }
+
+    function applyConformationBlend(tChairToBoat01){
+      // t=0 chair, t=1 boat
+      const chair = cycloHexChair();
+      const boat  = cycloHexBoat();
+
+      const pts = [];
+      for(let i=0;i<6;i++){
+        pts.push(lerpVec(chair[i], boat[i], tChairToBoat01));
+      }
+
+      // apply positions to carbon meshes
+      for(let i=0;i<6;i++){
+        carbonMeshes[i].position.copy(pts[i]);
+      }
+
+      // update labels if exist
+      if (showLabels){
+        for(let i=0;i<labelSprites.length;i++){
+          labelSprites[i].position.copy(pts[i]).add(new THREE.Vector3(0, 0.55, 0));
+        }
+      }
+
+      // update CC bonds
+      for(const b of bondCCMeshes){
+        const a = pts[b.i];
+        const c = pts[b.j];
+        setBondNow(b.mesh, a, c, 0.08);
+      }
+
+      // update H + CH bonds (simple outward model recalculated)
+      if (showHydrogen){
+        const center = new THREE.Vector3();
+        pts.forEach(p => center.add(p));
+        center.divideScalar(6);
+
+        // Each carbon has 2 H => order in hydrogenMeshes: i*2 + k
+        for(let i=0;i<6;i++){
+          const p = pts[i];
+          const out = p.clone().sub(center).normalize();
+          const tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
+          if (tangent.lengthSq() < 1e-6) tangent.set(1,0,0);
+
+          const dirs = [
+            out.clone().add(tangent.clone().multiplyScalar(0.35)).normalize(),
+            out.clone().add(tangent.clone().multiplyScalar(-0.35)).normalize()
+          ];
+
+          for(let k=0;k<2;k++){
+            const hIndex = i*2 + k;
+            const hPos = p.clone().add(dirs[k].multiplyScalar(BOND_CH));
+            hydrogenMeshes[hIndex].position.copy(hPos);
+          }
+        }
+
+        // update CH bonds: bondCHMeshes stores mapping
+        for(const b of bondCHMeshes){
+          const cPos = pts[b.cIndex];
+          const hPos = hydrogenMeshes[b.hIndex].position;
+          setBondNow(b.mesh, cPos, hPos, 0.04);
+        }
+      }
+
+      // recenter to keep screen stable (optional light recenter)
+      // → 大きく動くと見にくいので、ここは「炭素重心」基準で微調整
+      const cCenter = new THREE.Vector3();
+      for(let i=0;i<6;i++) cCenter.add(carbonMeshes[i].position);
+      cCenter.divideScalar(6);
+      moleculeGroup.children.forEach(obj => obj.position.sub(cCenter));
+    }
+
+    // ====== UI-driven updates ======
+    function updateMoleculeFromUI(){
+      const v = elRing.value;
+      currentRing = parseInt(v, 10);
+
+      // show cyclohex controls only for 6
+      elCycloHexControls.classList.toggle("hidden", currentRing !== 6);
+
+      // set title/desc
+      const nameMap = {
+        3: ["シクロプロパン", "環が小さく、ひずみが大きいと考えられます。"],
+        4: ["シクロブタン", "環ひずみを減らすため、わずかに折れ曲がると考えられます。"],
+        5: ["シクロペンタン", "平面から少し外れた立体形（パッカー）をとります。"],
+        6: ["シクロヘキサン", "椅子型は安定、舟形は反発が増えやすい配座です。ボタンで動的に変形します。"],
+        7: ["シクロヘプタン", "環が大きくなり、さまざまな立体形が可能です。"],
+        8: ["シクロオクタン", "さらに柔軟で複数の立体形をとりえます。"]
+      };
+
+      const [nm, dc] = nameMap[currentRing] || ["シクロアルカン", ""];
+      elTitle.textContent = nm;
+      elDesc.textContent = dc;
+
+      // reset conformation state
+      if (currentRing === 6){
+        conformation = "chair";
+        targetConformation = "chair";
+        confT = 0;
+        confAnimating = false;
+        confLoopPlaying = false;
+        elPlayConf.classList.remove("active");
+        elPlayConf.textContent = "動画再生 OFF";
+      }
+
+      buildCycloalkane(currentRing);
+    }
+
+    // ====== Controls ======
+    function resetView(resetZoom = true){
       moleculeGroup.rotation.set(0.35, 0.2, 0);
-      if (resetZoom) {
+      if (resetZoom){
         zoomScale = 1.0;
         moleculeGroup.scale.set(zoomScale, zoomScale, zoomScale);
-        vdwGroup.scale.set(zoomScale, zoomScale, zoomScale);
       }
     }
 
-    // ---- UI update ----
-    function updateUI() {
-      const carbonSelect = document.getElementById('carbonSelect');
-      const carbonCount = carbonSelect.value;
-      const isomerList = ISOMERS[carbonCount];
-      const btnContainer = document.getElementById('isomerButtons');
-      const label = document.getElementById('isomerLabel');
-
-      label.innerText = (carbonCount === "8") ? "異性体を選択（代表例）" : "異性体を選択";
-
-      btnContainer.innerHTML = '';
-      document.getElementById('isomerControls').classList.toggle('hidden', isomerList.length <= 1);
-
-      isomerList.forEach((iso, idx) => {
-        const btn = document.createElement('button');
-        btn.className = `struct-btn text-[9px] py-2 px-2 rounded-lg font-bold shadow-sm transition ${idx === currentIsomerIndex ? 'active' : 'hover:bg-gray-50'}`;
-        btn.innerText = iso.name;
-        btn.onclick = () => {
-          currentIsomerIndex = idx;
-          rotationMap = {};
-          rotationFlags = {};
-          updateUI();
-        };
-        btnContainer.appendChild(btn);
+    // ====== interactions ======
+    function setupInteractions(){
+      // UI show/hide
+      document.getElementById('hideUIPanel').addEventListener('click', () => {
+        document.getElementById('controlsPanel').classList.add('minimized');
+        document.getElementById('toggleUIPanel').classList.remove('hidden');
+      });
+      document.getElementById('toggleUIPanel').addEventListener('click', () => {
+        document.getElementById('controlsPanel').classList.remove('minimized');
+        document.getElementById('toggleUIPanel').classList.add('hidden');
       });
 
-      document.getElementById('molTitle').innerText = isomerList[currentIsomerIndex]?.name || "";
-      document.getElementById('molDesc').innerText = isomerList[currentIsomerIndex]?.desc || "";
+      // Select ring
+      elRing.addEventListener("change", updateMoleculeFromUI);
 
-      // rotation controls
-      const rotContainer = document.getElementById('rotationControls');
-      rotContainer.innerHTML = '';
-      activeControls = [];
+      // Toggle H
+      elToggleHydrogen.addEventListener("click", () => {
+        showHydrogen = !showHydrogen;
+        elToggleHydrogen.classList.toggle("active", showHydrogen);
+        elToggleHydrogen.textContent = showHydrogen ? "水素表示 ON" : "水素表示 OFF";
+        buildCycloalkane(currentRing);
+      });
 
-      function findRot(node, parent) {
-        if (node.type === 'C' && parent) {
-          const id = node.id;
-          if (!(id in rotationMap)) rotationMap[id] = 0;
+      // Toggle labels
+      elToggleLabels.addEventListener("click", () => {
+        showLabels = !showLabels;
+        elToggleLabels.classList.toggle("active", showLabels);
+        elToggleLabels.textContent = showLabels ? "炭素番号 ON" : "炭素番号 OFF";
+        buildCycloalkane(currentRing);
+      });
 
-          const btn = document.createElement('button');
-          btn.className =
-            "bg-emerald-500 text-white font-bold py-1.5 px-3 rounded-lg w-full text-[9px] flex justify-between items-center transition" +
-            (rotationFlags[id] ? " ring-2 ring-emerald-300" : " opacity-40");
+      // Auto rotate
+      elAutoRotate.addEventListener("click", () => {
+        isAutoRotate = !isAutoRotate;
+        elAutoRotate.textContent = isAutoRotate ? "自動回転 ON" : "自動回転 OFF";
+      });
 
-          let label = `結合回転`;
-          if (parent.iupac && node.iupac) label = `C${parent.iupac}-C${node.iupac} 回転`;
-          else if (node.iupac) label = `側鎖(C${node.iupac}) 回転`;
-          else if (parent.iupac) label = `側鎖(C${parent.iupac}) 回転`;
+      // Reset view
+      elReset.addEventListener("click", () => resetView(true));
 
-          btn.innerHTML = `<span>${label}</span><span>${rotationFlags[id] ? 'ON' : 'OFF'}</span>`;
-          btn.onclick = () => { rotationFlags[id] = !rotationFlags[id]; updateUI(); };
-          rotContainer.appendChild(btn);
-          activeControls.push({ id, btn });
-        }
-        if (node.children) node.children.forEach(c => findRot(c, node.type === 'C' ? node : null));
-      }
-      if (isomerList[currentIsomerIndex]) findRot(isomerList[currentIsomerIndex].root, null);
+      // Cyclohexane: one-shot toggle
+      elToggleConf.addEventListener("click", () => {
+        if (currentRing !== 6) return;
+        if (confLoopPlaying) return; // loop中は1回切替しない
 
-      // vdw button state
-      const vdwBtn = document.getElementById('toggleVDW');
-      vdwBtn.classList.toggle('active', showVDW);
+        targetConformation = (conformation === "chair") ? "boat" : "chair";
+        confT = 0;
+        confAnimating = true;
+      });
 
-      updateMolecule();
-    }
+      // Cyclohexane: loop play
+      elPlayConf.addEventListener("click", () => {
+        if (currentRing !== 6) return;
+        confLoopPlaying = !confLoopPlaying;
+        elPlayConf.classList.toggle("active", confLoopPlaying);
+        elPlayConf.textContent = confLoopPlaying ? "動画再生 ON" : "動画再生 OFF";
+        confAnimating = false;
+        confT = 0;
+      });
 
-    // ---- Interactions (rotate + pinch zoom) ----
-    function setupInteractions() {
+      // Drag rotate + pinch zoom
       let dragging = false, px = 0, py = 0;
       let lastPinchDist = 0;
 
       const getTouchDist = (t1, t2) => {
         const dx = t1.clientX - t2.clientX;
         const dy = t1.clientY - t2.clientY;
-        return Math.sqrt(dx * dx + dy * dy);
+        return Math.sqrt(dx*dx + dy*dy);
       };
 
       const onDown = (e) => {
-        if (e.touches && e.touches.length === 2) {
+        if (e.touches && e.touches.length === 2){
           dragging = false;
           lastPinchDist = getTouchDist(e.touches[0], e.touches[1]);
           return;
@@ -648,106 +684,64 @@
       };
 
       const onMove = (e) => {
-        // pinch zoom
-        if (e.touches && e.touches.length === 2) {
+        if (e.touches && e.touches.length === 2){
           e.preventDefault();
           const dist = getTouchDist(e.touches[0], e.touches[1]);
-          if (lastPinchDist > 0) {
+          if (lastPinchDist > 0){
             const ratio = dist / lastPinchDist;
             zoomScale = clamp(zoomScale * ratio, ZOOM_MIN, ZOOM_MAX);
             moleculeGroup.scale.set(zoomScale, zoomScale, zoomScale);
-            vdwGroup.scale.set(zoomScale, zoomScale, zoomScale);
           }
           lastPinchDist = dist;
           return;
         }
 
-        // drag rotate
         if (!dragging) return;
         const t = e.touches?.[0] || e;
         moleculeGroup.rotation.y += (t.clientX - px) * 0.01;
         moleculeGroup.rotation.x += (t.clientY - py) * 0.01;
-        vdwGroup.rotation.copy(moleculeGroup.rotation);
         px = t.clientX; py = t.clientY;
       };
 
       const onUp = () => { dragging = false; lastPinchDist = 0; };
 
-      renderer.domElement.addEventListener('mousedown', onDown);
-      renderer.domElement.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      renderer.domElement.addEventListener("mousedown", onDown);
+      renderer.domElement.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
 
-      renderer.domElement.addEventListener('touchstart', onDown, { passive: false });
-      renderer.domElement.addEventListener('touchmove', onMove, { passive: false });
-      window.addEventListener('touchend', onUp);
-
-      // UI events
-      document.getElementById('carbonSelect').addEventListener('change', () => {
-        currentIsomerIndex = 0;
-        rotationMap = {};
-        rotationFlags = {};
-        updateUI();
-      });
-      document.getElementById('toggleLabels').addEventListener('click', () => { showLabels = !showLabels; updateMolecule(); });
-      document.getElementById('toggleElectrons').addEventListener('click', () => { showElectrons = !showElectrons; updateMolecule(); });
-
-      document.getElementById('toggleVDW').addEventListener('click', () => {
-        showVDW = !showVDW;
-        updateUI(); // 再計算も含める
-      });
-
-      document.getElementById('hideUIPanel').addEventListener('click', () => {
-        document.getElementById('controlsPanel').classList.add('minimized');
-        document.getElementById('toggleUIPanel').classList.remove('hidden');
-      });
-      document.getElementById('toggleUIPanel').addEventListener('click', () => {
-        document.getElementById('controlsPanel').classList.remove('minimized');
-        document.getElementById('toggleUIPanel').classList.add('hidden');
-      });
-
-      document.getElementById('resetViewBtn').addEventListener('click', () => resetView(true));
-
-      document.getElementById('autoPlayBtn').addEventListener('click', function () {
-        isGlobalAutoPlaying = !isGlobalAutoPlaying;
-        activeControls.forEach(c => rotationFlags[c.id] = isGlobalAutoPlaying);
-        this.innerText = isGlobalAutoPlaying ? "全回転 OFF" : "全回転 ON";
-        updateUI();
-      });
-
-      document.getElementById('startAR').addEventListener('click', () => {
-        const exporter = new GLTFExporter();
-        exporter.parse(moleculeGroup, (gltf) => {
-          const blob = new Blob([JSON.stringify(gltf)], { type: 'application/json' });
-          const ar = document.getElementById('ar-viewer');
-          if (ar) { ar.src = URL.createObjectURL(blob); ar.activateAR(); }
-        }, { binary: false });
-      });
+      renderer.domElement.addEventListener("touchstart", onDown, { passive:false });
+      renderer.domElement.addEventListener("touchmove", onMove, { passive:false });
+      window.addEventListener("touchend", onUp);
     }
 
-    function animate() {
+    // ====== animation loop ======
+    let lastTime = performance.now();
+    function animate(){
       requestAnimationFrame(animate);
 
-      let updateNeeded = false;
-      for (let id in rotationFlags) {
-        if (rotationFlags[id]) { rotationMap[id] += 0.02; updateNeeded = true; }
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (isAutoRotate){
+        moleculeGroup.rotation.y += 0.008;
       }
 
-      if (updateNeeded) updateMolecule();
-
-      // vdwGroupはmoleculeGroupに追従
-      vdwGroup.rotation.copy(moleculeGroup.rotation);
+      // cyclohexane morph update
+      updateCyclohexaneMorph(dt);
 
       renderer.render(scene, camera);
     }
 
-    window.addEventListener('load', () => { setTimeout(init, 100); });
-    window.addEventListener('resize', () => {
-      if (camera && renderer) {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      }
+    // ====== resize ======
+    window.addEventListener("resize", () => {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     });
+
+    window.addEventListener("load", () => setTimeout(init, 80));
   </script>
 </body>
 </html>
