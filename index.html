@@ -29,7 +29,7 @@
       background: rgba(255,255,255,0.95);
       padding: 14px;
       border-radius: 12px;
-      max-width: 340px;
+      max-width: 360px;
       box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
       border: 1px solid #e5e7eb;
       max-height: 85vh;
@@ -62,7 +62,7 @@
     .mini-btn.active{ background:#111827; color:#fff; border-color:#111827; }
 
     @media (max-width: 768px){
-      .controls{ top:10px; left:10px; width: 300px; padding:12px; }
+      .controls{ top:10px; left:10px; width: 320px; padding:12px; }
       .toggle-ui-btn{ top:10px; left:10px; }
       .info{ bottom:10px; left:10px; }
     }
@@ -99,8 +99,7 @@
         </button>
       </div>
       <div class="mt-2 text-[10px] text-gray-500 leading-relaxed">
-        「椅子型 ⇄ 舟形」：1回だけ変形<br>
-        「動画再生」：椅子型⇄舟形を繰り返し
+        ※変形中も C–C 距離は拘束して一定になるよう補正しています
       </div>
     </div>
 
@@ -131,7 +130,7 @@
   <div id="description" class="info">
     <h2 id="molTitle" class="font-bold text-sm text-gray-800">シクロプロパン</h2>
     <p id="molDesc" class="text-[10px] text-gray-600">
-      C3〜C5は結合長が一定になる正多角形（平面）として表示。C6のみ椅子型⇄舟形の配座変換を表示します。
+      水素は環の面内に寝ず、sp³に近い向きで面外にも向くように配置しています。
     </p>
   </div>
 
@@ -150,23 +149,28 @@
     let zoomScale = 1.0;
     const ZOOM_MIN = 0.35, ZOOM_MAX = 3.5;
 
-    // ===== Physical-like constants =====
-    const BOND_CC = 1.54; // target C-C distance (model units)
+    // ===== constants =====
+    const BOND_CC = 1.54;
     const BOND_CH = 1.09;
 
     const RADIUS_C = 0.40;
     const RADIUS_H = 0.25;
 
-    // ===== Mesh refs =====
+    // tetra helper: need H-H angle 109.47 => half-angle 54.735
+    const THETA = Math.acos(Math.sqrt((1 - 1/3) / 2)); // = 54.735deg in rad (derived via cos(2θ) = -1/3)
+
+    // ===== refs =====
     let carbonMeshes = [];
     let hydrogenMeshes = [];
     let bondCCMeshes = [];
     let bondCHMeshes = [];
     let labelSprites = [];
 
-    // ===== Cyclohexane conformations =====
+    // ===== ring =====
     let currentRing = 3;
-    let conformation = "chair";       // current ('chair' or 'boat') for n=6
+
+    // ===== cyclohex conformations =====
+    let conformation = "chair";
     let targetConformation = "chair";
     let confT = 0;
     let confAnimating = false;
@@ -184,14 +188,13 @@
     const elTitle = document.getElementById("molTitle");
     const elDesc = document.getElementById("molDesc");
 
-    // ===== Utils =====
+    // ===== utils =====
     const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
     const lerp = (a,b,t)=>a+(b-a)*t;
     const lerpVec = (A,B,t)=>new THREE.Vector3(lerp(A.x,B.x,t), lerp(A.y,B.y,t), lerp(A.z,B.z,t));
     const easeInOut = (t)=> t*t*(3-2*t);
 
     function ringRadius(n){
-      // side s = 2R sin(pi/n) => R = s/(2 sin(pi/n))
       return BOND_CC / (2 * Math.sin(Math.PI / n));
     }
 
@@ -214,7 +217,6 @@
     function setBondNow(bondMesh, a, b, radius){
       const dir = new THREE.Vector3().subVectors(b, a);
       const len = dir.length();
-
       bondMesh.geometry.dispose();
       bondMesh.geometry = new THREE.CylinderGeometry(radius, radius, len, 14);
       bondMesh.position.copy(a).add(b).multiplyScalar(0.5);
@@ -231,7 +233,6 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(text, 64, 70);
-
       const tex = new THREE.CanvasTexture(canvas);
       const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
       const sp = new THREE.Sprite(mat);
@@ -249,7 +250,6 @@
     }
 
     // ===== Coordinate generators =====
-    // C3-C5: planar regular polygon (bond length is exactly BOND_CC by radius choice)
     function planarRing(n){
       const R = ringRadius(n);
       const pts = [];
@@ -260,16 +260,13 @@
       return pts;
     }
 
-    // C6 chair: parameters chosen so that ALL adjacent distances are exactly BOND_CC
-    // using a^2 = 3 b^2 and b^2 + c^2 = s^2/4 and s^2 = a^2 + b^2 + 4c^2
+    // C6 chair & boat (both have exact adjacent distances = BOND_CC)
     function cycloHexChair(){
       const s = BOND_CC;
-      const k = 0.6; // c = k*b  (見た目調整パラメータ。結合長は厳密に保たれる)
+      const k = 0.70; // 見た目用（結合長は維持される）
       const b = s / (2 * Math.sqrt(1 + k*k));
       const c = k * b;
       const a = Math.sqrt(3) * b;
-
-      // 1-2-3-4-5-6-1 の結合長がすべて s になる対称配置
       return [
         new THREE.Vector3( a,  b,  c),
         new THREE.Vector3( 0, 2*b, -c),
@@ -280,15 +277,11 @@
       ];
     }
 
-    // C6 boat: also ALL adjacent distances exactly BOND_CC
-    // enforce p3-p4 and p6-p1 are vertical: 2c = s => c = s/2
-    // and a^2 + b^2 + c^2 = s^2
     function cycloHexBoat(){
       const s = BOND_CC;
       const c = s/2;
       const a = s * Math.sqrt(3/8);
       const b = a;
-
       return [
         new THREE.Vector3( a, 0,  c),
         new THREE.Vector3( 0, b,  0),
@@ -299,18 +292,93 @@
       ];
     }
 
-    function getRingCarbonPositions(n){
+    function baseRingCarbonPositions(n){
       if (n===6){
         return (conformation==="chair") ? cycloHexChair() : cycloHexBoat();
       }
       return planarRing(n);
     }
 
+    // ===== PBD distance constraints (keep C-C constant during morph) =====
+    function enforceRingDistances(pts, iterations=12){
+      const n = pts.length;
+      // pin one point (to avoid whole ring drifting) — we will recenter later anyway
+      const pinned = 0;
+      const s = BOND_CC;
+
+      for(let it=0; it<iterations; it++){
+        for(let i=0; i<n; i++){
+          const j = (i+1)%n;
+          const p1 = pts[i], p2 = pts[j];
+          const d = new THREE.Vector3().subVectors(p2, p1);
+          const len = d.length();
+          if (len < 1e-9) continue;
+          const diff = (len - s) / len;
+          const corr = d.multiplyScalar(0.5 * diff);
+
+          if (i !== pinned) p1.add(corr);
+          if (j !== pinned) p2.sub(corr);
+        }
+      }
+    }
+
+    // ===== Hydrogen placement (sp3-like, out-of-plane) =====
+    function computeHydrogenPositions(carbonPts){
+      const n = carbonPts.length;
+      const Hpos = [];
+
+      // ring center
+      const center = new THREE.Vector3();
+      carbonPts.forEach(p=>center.add(p));
+      center.divideScalar(n);
+
+      for(let i=0;i<n;i++){
+        const prev = carbonPts[(i-1+n)%n];
+        const cur  = carbonPts[i];
+        const next = carbonPts[(i+1)%n];
+
+        const u = prev.clone().sub(cur).normalize(); // to prev
+        const v = next.clone().sub(cur).normalize(); // to next
+
+        // plane normal
+        let nrm = new THREE.Vector3().crossVectors(v, u);
+        if (nrm.lengthSq() < 1e-10) nrm = new THREE.Vector3(0,0,1);
+        nrm.normalize();
+
+        // outward direction (opposite of bisector of the two C-C bonds)
+        let bis = u.clone().add(v);
+        if (bis.lengthSq() < 1e-10) bis = cur.clone().sub(center);
+        bis.normalize();
+        const outward = bis.multiplyScalar(-1).normalize();
+
+        // build orthonormal basis: e1=outward, e2=normal (with alternation), e3=perp
+        const sign = (i % 2 === 0) ? 1 : -1; // alternate up/down around ring
+        const e1 = outward.clone();
+        const e2 = nrm.clone().multiplyScalar(sign).normalize();
+        const e3 = new THREE.Vector3().crossVectors(e2, e1).normalize();
+
+        // two H directions symmetric around e1 in the e1-e2 plane (H-H angle ~109.47)
+        const d1 = e1.clone().multiplyScalar(Math.cos(THETA)).add(e2.clone().multiplyScalar(Math.sin(THETA))).normalize();
+        const d2 = e1.clone().multiplyScalar(Math.cos(THETA)).add(e2.clone().multiplyScalar(-Math.sin(THETA))).normalize();
+
+        // small twist using e3 to avoid both H sitting exactly same plane for very small rings
+        // (keeping it subtle)
+        const twist = (n <= 4) ? 0.18 : 0.08;
+        d1.add(e3.clone().multiplyScalar(twist)).normalize();
+        d2.add(e3.clone().multiplyScalar(-twist)).normalize();
+
+        Hpos.push(cur.clone().add(d1.multiplyScalar(BOND_CH)));
+        Hpos.push(cur.clone().add(d2.multiplyScalar(BOND_CH)));
+      }
+
+      return Hpos; // length = 2n
+    }
+
     // ===== Build molecule =====
     function buildCycloalkane(n){
       clearGroup();
 
-      const carbonPos = getRingCarbonPositions(n);
+      const carbonPos = baseRingCarbonPositions(n);
 
       // carbon spheres + labels
       for(let i=0;i<n;i++){
@@ -336,34 +404,24 @@
         setBondNow(bond, carbonPos[i], carbonPos[j], 0.08);
       }
 
-      // Hydrogens (simple outward model; not stereochemically perfect, but位置は安定)
+      // Hydrogens (sp3-like, out-of-plane)
       if (showHydrogen){
-        const center = new THREE.Vector3();
-        carbonPos.forEach(p=>center.add(p));
-        center.divideScalar(n);
+        const Hpos = computeHydrogenPositions(carbonPos);
+
+        for(let h=0; h<Hpos.length; h++){
+          const hm = makeAtomSphere(RADIUS_H, 0xadd8e6);
+          hm.position.copy(Hpos[h]);
+          moleculeGroup.add(hm);
+          hydrogenMeshes.push(hm);
+        }
 
         for(let i=0;i<n;i++){
-          const p = carbonPos[i];
-          const out = p.clone().sub(center).normalize();
-          let tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
-          if (tangent.lengthSq()<1e-8) tangent.set(1,0,0);
-
-          const dirs = [
-            out.clone().add(tangent.clone().multiplyScalar(0.35)).normalize(),
-            out.clone().add(tangent.clone().multiplyScalar(-0.35)).normalize()
-          ];
-
           for(let k=0;k<2;k++){
-            const hPos = p.clone().add(dirs[k].multiplyScalar(BOND_CH));
-            const h = makeAtomSphere(RADIUS_H, 0xadd8e6);
-            h.position.copy(hPos);
-            moleculeGroup.add(h);
-            hydrogenMeshes.push(h);
-
+            const hIndex = i*2 + k;
             const bond = makeBondCylinder(0.04, 0xcccccc);
             moleculeGroup.add(bond);
-            bondCHMeshes.push({ mesh: bond, cIndex: i, hIndex: hydrogenMeshes.length-1 });
-            setBondNow(bond, p, hPos, 0.04);
+            bondCHMeshes.push({ mesh: bond, cIndex: i, hIndex });
+            setBondNow(bond, carbonPos[i], Hpos[hIndex], 0.04);
           }
         }
       }
@@ -381,21 +439,25 @@
       const size = new THREE.Vector3();
       box.getSize(size);
       const maxDim = Math.max(size.x, size.y, size.z);
-      let dist = Math.max(6, maxDim*2.4 + 2);
+      let dist = Math.max(6, maxDim*2.5 + 2);
       if (camera.aspect < 1.0) dist *= 1.35;
       camera.position.set(0, 0, dist);
     }
 
-    // ===== Cyclohexane morph =====
-    function applyConformationBlend(tChairToBoat01){
-      // t=0 chair, t=1 boat
+    // ===== Cyclohexane morph with distance constraints =====
+    function applyCyclohexBlend(phase01){
+      // 0 chair, 1 boat
       const chair = cycloHexChair();
       const boat  = cycloHexBoat();
 
+      // start as linear blend...
       const pts = [];
-      for(let i=0;i<6;i++) pts.push(lerpVec(chair[i], boat[i], tChairToBoat01));
+      for(let i=0;i<6;i++) pts.push(lerpVec(chair[i], boat[i], phase01));
 
-      // apply to carbons
+      // ...then enforce ring constraints so all C-C are constant during animation
+      enforceRingDistances(pts, 14);
+
+      // apply to carbon meshes
       for(let i=0;i<6;i++){
         carbonMeshes[i].position.copy(pts[i]);
       }
@@ -407,43 +469,23 @@
         }
       }
 
-      // C-C bonds
+      // bonds C-C
       for(const b of bondCCMeshes){
         setBondNow(b.mesh, pts[b.i], pts[b.j], 0.08);
       }
 
-      // Hydrogens + C-H bonds (recompute outward each frame)
+      // hydrogens update
       if (showHydrogen){
-        const center = new THREE.Vector3();
-        pts.forEach(p=>center.add(p));
-        center.divideScalar(6);
-
-        for(let i=0;i<6;i++){
-          const p = pts[i];
-          const out = p.clone().sub(center).normalize();
-          let tangent = new THREE.Vector3(-out.y, out.x, 0).normalize();
-          if (tangent.lengthSq()<1e-8) tangent.set(1,0,0);
-
-          const dirs = [
-            out.clone().add(tangent.clone().multiplyScalar(0.35)).normalize(),
-            out.clone().add(tangent.clone().multiplyScalar(-0.35)).normalize()
-          ];
-
-          for(let k=0;k<2;k++){
-            const hIndex = i*2 + k;
-            const hPos = p.clone().add(dirs[k].multiplyScalar(BOND_CH));
-            hydrogenMeshes[hIndex].position.copy(hPos);
-          }
+        const Hpos = computeHydrogenPositions(pts);
+        for(let h=0; h<Hpos.length; h++){
+          hydrogenMeshes[h].position.copy(Hpos[h]);
         }
-
         for(const b of bondCHMeshes){
-          const cPos = pts[b.cIndex];
-          const hPos = hydrogenMeshes[b.hIndex].position;
-          setBondNow(b.mesh, cPos, hPos, 0.04);
+          setBondNow(b.mesh, pts[b.cIndex], hydrogenMeshes[b.hIndex].position, 0.04);
         }
       }
 
-      // recentre to keep it from drifting
+      // recenter to avoid drift
       const cCenter = new THREE.Vector3();
       for(let i=0;i<6;i++) cCenter.add(carbonMeshes[i].position);
       cCenter.divideScalar(6);
@@ -454,9 +496,9 @@
       if (currentRing !== 6) return;
 
       if (confLoopPlaying){
-        confT += dt * 0.6;
+        confT += dt * 0.55;
         const phase = (Math.sin(confT * Math.PI * 2) + 1) / 2; // 0..1
-        applyConformationBlend(phase);
+        applyCyclohexBlend(phase);
         return;
       }
 
@@ -472,26 +514,25 @@
       const t = easeInOut(confT);
 
       if (conformation==="chair" && targetConformation==="boat"){
-        applyConformationBlend(t);
+        applyCyclohexBlend(t);
       } else if (conformation==="boat" && targetConformation==="chair"){
-        applyConformationBlend(1 - t);
+        applyCyclohexBlend(1 - t);
       } else {
         confAnimating = false;
       }
     }
 
-    // ===== UI actions =====
+    // ===== UI =====
     function updateMoleculeFromUI(){
       currentRing = parseInt(elRing.value, 10);
 
-      // show conformation buttons only for C6
       elCycloHexControls.classList.toggle("hidden", currentRing !== 6);
 
       const nameMap = {
-        3: ["シクロプロパン", "C3〜C5は結合長が一定になる正多角形（平面）として表示します（結合長はC–C=1.54として整合）。"],
-        4: ["シクロブタン", "ここでは結合長整合を優先して平面モデルで表示（実際はわずかに折れ曲がることが多い）。"],
-        5: ["シクロペンタン", "ここでは結合長整合を優先して平面モデルで表示（実際はエンベロープ等で非平面）。"],
-        6: ["シクロヘキサン", "椅子型・舟形ともに、環の全てのC–C結合長が同じ（1.54）になるよう設計した座標で表示します。ボタンで配座変換します。"]
+        3: ["シクロプロパン", "水素は環の面内に寝ず、面外方向も含めてsp³に近い向きで配置しています。"],
+        4: ["シクロブタン", "水素は面外も使い、CH₂が平面に並ばないように配置しています。"],
+        5: ["シクロペンタン", "水素は面外も使い、CH₂が平面に並ばないように配置しています。"],
+        6: ["シクロヘキサン", "椅子型⇄舟形の変形中も、C–C距離が一定になるよう毎フレーム拘束して補正しています。"]
       };
       const [nm, dc] = nameMap[currentRing] || ["シクロアルカン", ""];
       elTitle.textContent = nm;
@@ -518,7 +559,6 @@
       }
     }
 
-    // ===== Interactions =====
     function setupInteractions(){
       document.getElementById('hideUIPanel').addEventListener('click', () => {
         document.getElementById('controlsPanel').classList.add('minimized');
@@ -552,11 +592,9 @@
 
       elReset.addEventListener("click", () => resetView(true));
 
-      // cyclohex controls
       elToggleConf.addEventListener("click", () => {
         if (currentRing !== 6) return;
         if (confLoopPlaying) return;
-
         targetConformation = (conformation === "chair") ? "boat" : "chair";
         confT = 0;
         confAnimating = true;
@@ -571,7 +609,7 @@
         confT = 0;
       });
 
-      // drag rotate + pinch zoom
+      // drag + pinch
       let dragging = false, px = 0, py = 0;
       let lastPinchDist = 0;
 
@@ -623,11 +661,10 @@
       window.addEventListener("touchend", onUp);
     }
 
-    // ===== Loop =====
+    // ===== loop =====
     let lastTime = performance.now();
     function animate(){
       requestAnimationFrame(animate);
-
       const now = performance.now();
       const dt = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
@@ -639,7 +676,7 @@
       renderer.render(scene, camera);
     }
 
-    // ===== Init =====
+    // ===== init =====
     function init(){
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
